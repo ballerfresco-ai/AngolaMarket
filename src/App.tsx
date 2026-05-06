@@ -64,6 +64,14 @@ export default function App() {
             setUser(profile);
           } else {
             console.warn('Profile not found for user:', session.user.id);
+            // Fallback: set basic info from session metadata so app doesn't loop
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name || 'Usuário',
+              role: (session.user.user_metadata?.role as any) || 'CLIENTE',
+              created_at: session.user.created_at
+            } as User);
           }
         } else {
           console.log('No session found');
@@ -88,7 +96,19 @@ export default function App() {
             .select('*')
             .eq('id', session.user.id)
             .single();
-          if (profile) setUser(profile);
+          
+          if (profile) {
+            setUser(profile);
+          } else {
+            // Fallback for session found without DB profile yet
+            setUser({
+              id: session.user.id,
+              email: session.user.email || '',
+              full_name: session.user.user_metadata?.full_name || 'Usuário',
+              role: (session.user.user_metadata?.role as any) || 'CLIENTE',
+              created_at: session.user.created_at
+            } as User);
+          }
         } else {
           setUser(null);
         }

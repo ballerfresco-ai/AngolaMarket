@@ -15,18 +15,41 @@ export default function Login() {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    console.log('Iniciando login para:', email);
+
+    // Safety timeout: reset loading if it takes too long
+    const timeout = setTimeout(() => {
+      setLoading(loadingState => {
+        if (loadingState) {
+          setError('O tempo de resposta expirou. Verifique sua conexão e tente novamente.');
+          return false;
+        }
+        return false;
+      });
+    }, 20000);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      if ((supabase as any)._isDummy) {
+        throw new Error('As variáveis do Supabase não foram configuradas no painel de configurações.');
+      }
+
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Erro no signIn:', error);
+        throw error;
+      }
+      
+      console.log('Login bem-sucedido para:', data.user?.id);
       navigate('/dashboard');
     } catch (err: any) {
+      console.error('Excepção no login:', err);
       setError(err.message || 'Falha ao entrar. Verifique suas credenciais.');
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   };

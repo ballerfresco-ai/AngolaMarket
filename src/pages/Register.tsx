@@ -18,12 +18,18 @@ export default function Register() {
 
   useEffect(() => {
     async function checkAdm() {
-      const { count } = await supabase
-        .from('users')
-        .select('*', { count: 'exact', head: true })
-        .eq('role', 'ADM');
-      
-      setAdmExists((count || 0) > 0);
+      try {
+        const { data, error } = await supabase.rpc('has_admin');
+        
+        if (error) {
+          console.warn('Erro ao verificar ADM:', error);
+          setAdmExists(false);
+          return;
+        }
+        setAdmExists(!!data);
+      } catch (err) {
+        console.error('Falha geral ao verificar ADM:', err);
+      }
     }
     checkAdm();
   }, []);
