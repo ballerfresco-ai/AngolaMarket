@@ -76,14 +76,33 @@ CREATE TABLE affiliate_links (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 2. RLS (Row Level Security) - Simplified for this context, but recommended for production
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE products ENABLE ROW LEVEL SECURITY;
-ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
-ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE delivery_fees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE affiliate_links ENABLE ROW LEVEL SECURITY;
+-- 2. RLS (Row Level Security) Policies
+
+-- Usuários: Permitir que qualquer um insira seu próprio perfil (necessário para o Registro)
+CREATE POLICY "Users can insert their own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
+CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+
+-- Produtos: Qualquer um pode ver produtos aprovados. Apenas produtores criam os seus.
+CREATE POLICY "Anyone can view approved products" ON products FOR SELECT USING (status = 'APROVADO');
+CREATE POLICY "Producers can manage their own products" ON products FOR ALL USING (producer_id = auth.uid());
+CREATE POLICY "Admins can view all products" ON products FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+CREATE POLICY "Admins can update all products" ON products FOR UPDATE USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+
+-- Pedidos: Clientes criam seus pedidos. Produtores veem os seus.
+CREATE POLICY "Clients can create orders" ON orders FOR INSERT WITH CHECK (auth.uid() = client_id);
+CREATE POLICY "Clients can view their own orders" ON orders FOR SELECT USING (auth.uid() = client_id);
+CREATE POLICY "Producers can view orders for their products" ON orders FOR SELECT USING (auth.uid() = producer_id);
+CREATE POLICY "Affiliates can view orders they referred" ON orders FOR SELECT USING (auth.uid() = affiliate_id);
+CREATE POLICY "Admins can view all orders" ON orders FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+
+-- Carteiras: Apenas o dono pode ver.
+CREATE POLICY "Users can view their own wallet" ON wallets FOR SELECT USING (auth.uid() = user_id);
+
+-- Taxas de Entrega: Público para leitura.
+CREATE POLICY "Anyone can view delivery fees" ON delivery_fees FOR SELECT USING (true);
+CREATE POLICY "Admins can manage delivery fees" ON delivery_fees FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
 
 -- 3. Functions & Triggers (Auto-create wallet on user signup)
 CREATE OR REPLACE FUNCTION public.handle_new_user()
