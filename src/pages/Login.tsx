@@ -21,32 +21,44 @@ export default function Login() {
     const timeout = setTimeout(() => {
       setLoading(loadingState => {
         if (loadingState) {
-          setError('O tempo de resposta expirou. Verifique sua conexão e tente novamente.');
+          setError('O tempo de resposta expirou. Se o problema persistir, verifique a sua conexão ou recarregue a página.');
           return false;
         }
         return false;
       });
-    }, 20000);
+    }, 45000);
 
     try {
-      if ((supabase as any)._isDummy) {
-        throw new Error('As variáveis do Supabase não foram configuradas no painel de configurações.');
+      if (!(supabase as any)._isConfigured) {
+        throw new Error('As variáveis do Supabase não foram configuradas! Vá em Configurações no canto superior direito e adicione VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
       }
 
-      const { data, error } = await supabase.auth.signInWithPassword({
+      console.log('Enviando pedido de login ao Supabase para:', email);
+      const { data, error: loginError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) {
-        console.error('Erro no signIn:', error);
-        throw error;
+      if (loginError) {
+        console.error('Erro retornado pelo Supabase:', loginError);
+        if (loginError.message.includes('Email not confirmed')) {
+          throw new Error('O seu email ainda não foi confirmado. Verifique a sua caixa de entrada.');
+        }
+        if (loginError.message.includes('Invalid login credentials')) {
+          throw new Error('Email ou palavra-passe incorretos.');
+        }
+        throw loginError;
       }
       
-      console.log('Login bem-sucedido para:', data.user?.id);
-      navigate('/dashboard');
+      if (data?.user) {
+        console.log('Login bem-sucedido! Redirecionando...');
+        // Force a hard redirect to dashboard to ensure state is clean
+        window.location.href = '/dashboard';
+      } else {
+        throw new Error('Login processado mas nenhum utilizador retornado.');
+      }
     } catch (err: any) {
-      console.error('Excepção no login:', err);
+      console.error('Erro no processo de login:', err);
       setError(err.message || 'Falha ao entrar. Verifique suas credenciais.');
     } finally {
       clearTimeout(timeout);

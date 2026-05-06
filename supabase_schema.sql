@@ -86,17 +86,55 @@ ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delivery_fees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE affiliate_links ENABLE ROW LEVEL SECURITY;
 
+-- Clean up existing policies before creating new ones to allow re-running the script
+DO $$ 
+BEGIN
+    -- Users
+    DROP POLICY IF EXISTS "Users can insert their own profile" ON users;
+    DROP POLICY IF EXISTS "Users can view their own profile" ON users;
+    DROP POLICY IF EXISTS "Users can update their own profile" ON users;
+    DROP POLICY IF EXISTS "Admins can view all profiles" ON users;
+    
+    -- Products
+    DROP POLICY IF EXISTS "Anyone can view approved products" ON products;
+    DROP POLICY IF EXISTS "Producers can manage their own products" ON products;
+    DROP POLICY IF EXISTS "Admins can view all products" ON products;
+    DROP POLICY IF EXISTS "Admins can update all products" ON products;
+    
+    -- Orders
+    DROP POLICY IF EXISTS "Clients can create orders" ON orders;
+    DROP POLICY IF EXISTS "Clients can view their own orders" ON orders;
+    DROP POLICY IF EXISTS "Producers can view orders for their products" ON orders;
+    DROP POLICY IF EXISTS "Affiliates can view orders they referred" ON orders;
+    DROP POLICY IF EXISTS "Admins can view all orders" ON orders;
+    
+    -- Wallets
+    DROP POLICY IF EXISTS "Users can view their own wallet" ON wallets;
+    
+    -- Affiliate Links
+    DROP POLICY IF EXISTS "Affiliates can create links" ON affiliate_links;
+    DROP POLICY IF EXISTS "Anyone can view affiliate links" ON affiliate_links;
+    
+    -- Withdrawals
+    DROP POLICY IF EXISTS "Users can create withdrawals" ON withdrawals;
+    DROP POLICY IF EXISTS "Users can view their own withdrawals" ON withdrawals;
+    DROP POLICY IF EXISTS "Admins can manage all withdrawals" ON withdrawals;
+END $$;
+
 -- Usuários: Políticas
 CREATE POLICY "Users can insert their own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (role = 'ADM');
 
 -- RPC to check if admin exists (Publicly accessible)
 CREATE OR REPLACE FUNCTION public.has_admin()
 RETURNS boolean AS $$
+DECLARE
+  exists_admin boolean;
 BEGIN
-  RETURN EXISTS (SELECT 1 FROM public.users WHERE role = 'ADM');
+  SELECT EXISTS (SELECT 1 FROM public.users WHERE role = 'ADM') INTO exists_admin;
+  RETURN COALESCE(exists_admin, false);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -154,7 +192,7 @@ BEGIN
   
   RETURN new;
 EXCEPTION WHEN OTHERS THEN
-  -- Ultimate fallback to prevent signUp failure
+  -- Fallback logic: if it fails, at least log it somehow or just ignore to allow the auth user creation
   RETURN new;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1,5 +1,5 @@
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { User } from './types';
 
@@ -32,8 +32,8 @@ export default function App() {
     const checkUser = async () => {
       try {
         console.log('Checking user session...');
-        // Verify if supabase is the dummy or real one
-        if ((supabase as any)._isDummy) {
+        // Verify if supabase is the real one
+        if (!(supabase as any)._isConfigured) {
           console.warn('Supabase is not configured. Running in limited mode.');
           setLoading(false);
           return;
@@ -42,29 +42,39 @@ export default function App() {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.error('Session error:', sessionError);
+          console.error('Erro ao buscar sessão inicial:', sessionError);
           setLoading(false);
           return;
         }
 
         if (session?.user) {
-          console.log('Session found:', session.user.id);
-          const { data: profile, error: profileError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+          console.log('Sessão encontrada no carregamento inicial:', session.user.id);
           
-          if (profileError) {
-            console.error('Profile fetch error:', profileError);
-          }
+          // Use a direct fetch with timeout
+          const fetchProfile = async () => {
+            const { data: profile, error: profileError } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+            
+            if (profileError) {
+              console.warn('Erro ao buscar perfil (usuário logado mas sem perfil?):', profileError);
+            }
+            return profile;
+          };
+
+          // Race the fetch against a 3s timeout
+          const profile = await Promise.race([
+            fetchProfile(),
+            new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000))
+          ]);
 
           if (profile) {
-            console.log('Profile found:', profile.role);
+            console.log('Perfil sincronizado com sucesso:', profile.role);
             setUser(profile);
           } else {
-            console.warn('Profile not found for user:', session.user.id);
-            // Fallback: set basic info from session metadata so app doesn't loop
+            console.log('Usando dados de reserva (perfil lento ou não encontrado)');
             setUser({
               id: session.user.id,
               email: session.user.email || '',
@@ -73,11 +83,12 @@ export default function App() {
               created_at: session.user.created_at
             } as User);
           }
-        } else {
-          console.log('No session found');
+        }
+ else {
+          console.log('Nenhuma sessão activa encontrada.');
         }
       } catch (err) {
-        console.error('Error during site initialization:', err);
+        console.error('Erro crítico na inicialização do App:', err);
       } finally {
         setLoading(false);
       }
@@ -88,32 +99,39 @@ export default function App() {
     // Listen for auth changes
     let subscription: any = null;
     try {
-      const result = supabase.auth.onAuthStateChange(async (event, session) => {
-        console.log('Auth event:', event);
+      const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Evento de Autenticação:', event, session?.user?.id);
+        
         if (session?.user) {
-          const { data: profile } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          
-          if (profile) {
-            setUser(profile);
-          } else {
-            // Fallback for session found without DB profile yet
-            setUser({
-              id: session.user.id,
-              email: session.user.email || '',
-              full_name: session.user.user_metadata?.full_name || 'Usuário',
-              role: (session.user.user_metadata?.role as any) || 'CLIENTE',
-              created_at: session.user.created_at
-            } as User);
-          }
+          const fetchAndSetProfile = async () => {
+            try {
+              const { data: profile } = await supabase
+                .from('users')
+                .select('*')
+                .eq('id', session.user.id)
+                .single();
+              
+              if (profile) {
+                setUser(profile);
+              } else {
+                setUser({
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  full_name: session.user.user_metadata?.full_name || 'Usuário',
+                  role: (session.user.user_metadata?.role as any) || 'CLIENTE',
+                  created_at: session.user.created_at
+                } as User);
+              }
+            } catch (err) {
+              console.error('Erro ao processar auth change:', err);
+            }
+          };
+          fetchAndSetProfile();
         } else {
           setUser(null);
         }
       });
-      subscription = result.data?.subscription;
+      subscription = data?.subscription;
     } catch (err) {
       console.warn('Could not set up auth state listener:', err);
     }
@@ -132,27 +150,42 @@ export default function App() {
     );
   }
 
+  // Helper element for protected routes
+  const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    if (loading) return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+    
+    // If we have a user state, we're definitely good
+    if (user) return <>{children}</>;
+    
+    // If no user, redirect to login
+    return <Navigate to="/login" replace />;
+  };
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-red-600 selection:text-white">
         <Routes>
           <Route path="/" element={<Home user={user} />} />
           <Route path="/product/:id" element={<ProductDetails user={user} />} />
-          <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" />} />
-          <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" />} />
+          <Route path="/login" element={!user ? <Login /> : <Navigate to="/dashboard" replace />} />
+          <Route path="/register" element={!user ? <Register /> : <Navigate to="/dashboard" replace />} />
           
           {/* Protected Routes */}
           <Route 
             path="/dashboard/*" 
-            element={user ? <Dashboard user={user} /> : <Navigate to="/login" />} 
+            element={<ProtectedRoute><Dashboard user={user!} /></ProtectedRoute>} 
           />
           <Route 
             path="/cart" 
-            element={user ? <Cart user={user} /> : <Navigate to="/login" />} 
+            element={<ProtectedRoute><Cart user={user!} /></ProtectedRoute>} 
           />
           <Route 
             path="/orders" 
-            element={user ? <Orders user={user} /> : <Navigate to="/login" />} 
+            element={<ProtectedRoute><Orders user={user!} /></ProtectedRoute>} 
           />
         </Routes>
       </div>
