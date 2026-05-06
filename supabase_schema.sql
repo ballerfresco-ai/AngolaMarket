@@ -86,6 +86,23 @@ ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delivery_fees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE affiliate_links ENABLE ROW LEVEL SECURITY;
 
+-- Ensure only one ADM can exist
+CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_role ON users (role) WHERE (role = 'ADM');
+
+-- Admin Helper Function
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN (
+    SELECT EXISTS (
+      SELECT 1 FROM public.users 
+      WHERE id = auth.uid() 
+      AND role = 'ADM'
+    )
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Clean up existing policies before creating new ones to allow re-running the script
 DO $$ 
 BEGIN
@@ -125,7 +142,7 @@ END $$;
 CREATE POLICY "Users can insert their own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
 CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (role = 'ADM');
+CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (public.is_admin());
 
 -- RPC to check if admin exists (Publicly accessible)
 CREATE OR REPLACE FUNCTION public.has_admin()
@@ -144,24 +161,104 @@ GRANT EXECUTE ON FUNCTION public.has_admin() TO anon, authenticated;
 -- Produtos: Políticas
 CREATE POLICY "Anyone can view approved products" ON products FOR SELECT USING (status = 'APROVADO');
 CREATE POLICY "Producers can manage their own products" ON products FOR ALL USING (producer_id = auth.uid());
-CREATE POLICY "Admins can view all products" ON products FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
-CREATE POLICY "Admins can update all products" ON products FOR UPDATE USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+CREATE POLICY "Admins can view all products" ON products FOR SELECT USING (public.is_admin());
+CREATE POLICY "Admins can update all products" ON products FOR UPDATE USING (public.is_admin());
 
 -- Pedidos: Políticas
 CREATE POLICY "Clients can create orders" ON orders FOR INSERT WITH CHECK (auth.uid() = client_id);
 CREATE POLICY "Clients can view their own orders" ON orders FOR SELECT USING (auth.uid() = client_id);
 CREATE POLICY "Producers can view orders for their products" ON orders FOR SELECT USING (auth.uid() = producer_id);
 CREATE POLICY "Affiliates can view orders they referred" ON orders FOR SELECT USING (auth.uid() = affiliate_id);
-CREATE POLICY "Admins can view all orders" ON orders FOR SELECT USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+CREATE POLICY "Admins can view all orders" ON orders FOR SELECT USING (public.is_admin());
 
 -- Carteiras: Políticas
 CREATE POLICY "Users can view their own wallet" ON wallets FOR SELECT USING (auth.uid() = user_id);
 
 -- Taxas de Entrega: Políticas
 CREATE POLICY "Anyone can view delivery fees" ON delivery_fees FOR SELECT USING (true);
-CREATE POLICY "Admins can manage delivery fees" ON delivery_fees FOR ALL USING (EXISTS (SELECT 1 FROM users WHERE id = auth.uid() AND role = 'ADM'));
+CREATE POLICY "Admins can manage delivery fees" ON delivery_fees FOR ALL USING (public.is_admin());
 
--- 3. Functions & Triggers (Improved robust version)
+-- 3. Functions & Triggers
+CREATE OR REPLACE FUNCTION public.handle_order_completion()
+RETURNS trigger AS $$
+DECLARE
+  v_product_price DECIMAL;
+  v_commission DECIMAL;
+  v_affiliate_cut DECIMAL;
+  v_producer_cut DECIMAL;
+BEGIN
+  -- Only act when order is set to 'ENTREGUE'
+  IF NEW.status = 'ENTREGUE' AND OLD.status != 'ENTREGUE' THEN
+    v_product_price := NEW.total_price;
+    v_commission := v_product_price * 0.10; -- 10% Platform fee
+    v_affiliate_cut := 0;
+
+    -- If there's an affiliate, they get 5% of the total price (half of commission)
+    IF NEW.affiliate_id IS NOT NULL THEN
+      v_affiliate_cut := v_product_price * 0.05;
+      
+      UPDATE public.wallets 
+      SET balance = balance + v_affiliate_cut, updated_at = NOW()
+      WHERE user_id = NEW.affiliate_id;
+    END IF;
+
+    -- Producer gets the rest (Total - Platform Commission)
+    -- Actually, if affiliate gets 5%, platform gets 5%, or does platform always get 10%?
+    -- Let's say: Producer gets 90%. If there is an affiliate, the 10% commission is split.
+    -- Or: Producer gets 85%, Affiliate 5%, Platform 10%.
+    v_producer_cut := v_product_price - v_commission; -- Platform takes 10%
+    
+    UPDATE public.wallets 
+    SET balance = balance + v_producer_cut, updated_at = NOW()
+    WHERE user_id = NEW.producer_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_order_delivered
+  AFTER UPDATE ON public.orders
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_order_completion();
+
+-- Handle Withdrawal requests (deduct balance on request)
+CREATE OR REPLACE FUNCTION public.handle_withdrawal_request()
+RETURNS trigger AS $$
+BEGIN
+  -- Deduct balance when a new pending withdrawal is created
+  UPDATE public.wallets
+  SET balance = balance - NEW.amount, updated_at = NOW()
+  WHERE user_id = NEW.user_id AND balance >= NEW.amount;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Saldo insuficiente para realizar o saque.';
+  END IF;
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_withdrawal_request
+  BEFORE INSERT ON public.withdrawals
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_withdrawal_request();
+
+-- Handle Withdrawal rejection (refund balance)
+CREATE OR REPLACE FUNCTION public.handle_withdrawal_rejection()
+RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = 'REJEITADO' AND OLD.status = 'PENDENTE' THEN
+    UPDATE public.wallets
+    SET balance = balance + OLD.amount, updated_at = NOW()
+    WHERE user_id = OLD.user_id;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_withdrawal_finalized
+  AFTER UPDATE ON public.withdrawals
+  FOR EACH ROW EXECUTE PROCEDURE public.handle_withdrawal_rejection();
+
+-- 4. Rest of existing functions...
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE

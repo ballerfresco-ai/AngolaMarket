@@ -15,27 +15,42 @@ import {
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
+import WithdrawModal from '../../components/WithdrawModal';
 
 export default function ProducerDashboard({ user }: { user: User }) {
   const [products, setProducts] = useState<Product[]>([]);
+  const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [salesData, setSalesData] = useState({ count: 0, total: 0 });
   const [wallet, setWallet] = useState<{ balance: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+
+  async function fetchWallet() {
+    const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single();
+    if (data) setWallet(data);
+  }
 
   useEffect(() => {
     async function fetchData() {
       const [
         { data: productsData },
         { data: walletData },
-        { data: ordersData }
+        { data: ordersData },
+        { data: recentOrdersData }
       ] = await Promise.all([
         supabase.from('products').select('*').eq('producer_id', user.id).order('created_at', { ascending: false }),
         supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
-        supabase.from('orders').select('*').eq('producer_id', user.id).eq('status', 'ENTREGUE')
+        supabase.from('orders').select('*').eq('producer_id', user.id).eq('status', 'ENTREGUE'),
+        supabase.from('orders')
+          .select('*, products:product_id(name, image_url)')
+          .eq('producer_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(5)
       ]);
 
       if (productsData) setProducts(productsData);
       if (walletData) setWallet(walletData);
+      if (recentOrdersData) setRecentOrders(recentOrdersData);
       
       const totalSales = ordersData?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
       setSalesData({ count: ordersData?.length || 0, total: totalSales });
@@ -49,6 +64,13 @@ export default function ProducerDashboard({ user }: { user: User }) {
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+      <WithdrawModal 
+        isOpen={isWithdrawOpen} 
+        onClose={() => setIsWithdrawOpen(false)} 
+        balance={wallet?.balance || 0}
+        userId={user.id}
+        onSuccess={fetchWallet}
+      />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black mb-2">Olá, {user.full_name.split(' ')[0]}!</h1>
@@ -96,7 +118,10 @@ export default function ProducerDashboard({ user }: { user: User }) {
           </div>
           <p className="text-red-100 text-sm font-medium mb-1 text-opacity-80">Saldo Disponível</p>
           <p className="text-3xl font-black">{formatCurrency(wallet?.balance || 0)}</p>
-          <button className="mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold transition-all">
+          <button 
+            onClick={() => setIsWithdrawOpen(true)}
+            className="mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold transition-all"
+          >
             Solicitar Saque
           </button>
         </div>
@@ -148,11 +173,30 @@ export default function ProducerDashboard({ user }: { user: User }) {
             </h3>
             <Link to="/dashboard/producer-orders" className="text-xs text-red-500 font-bold hover:underline">Ver todas</Link>
           </div>
-          <div className="flex-1 divide-y divide-zinc-800 max-h-[400px] overflow-y-auto">
-             {/* Empty state or list would go here */}
-             <div className="p-12 text-center text-zinc-500">
-                <p>O seu histórico de vendas aparecerá aqui.</p>
-             </div>
+          <div className="flex-1 divide-y divide-zinc-800 max-h-[400px] overflow-y-auto font-medium">
+             {recentOrders.map((order) => (
+                <div key={order.id} className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden shrink-0">
+                      <img src={order.products?.image_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold truncate max-w-[150px]">{order.products?.name}</p>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{formatDate(order.created_at)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-red-500 tracking-tighter">{formatCurrency(order.total_price)}</p>
+                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">{order.status}</p>
+                  </div>
+                </div>
+             ))}
+             {recentOrders.length === 0 && (
+                <div className="p-12 text-center text-zinc-500">
+                   <ShoppingCart className="w-12 h-12 mx-auto opacity-10 mb-4" />
+                   <p className="italic">O seu histórico de vendas aparecerá aqui.</p>
+                </div>
+             )}
           </div>
         </div>
       </div>

@@ -8,6 +8,19 @@ import ProducerDashboard from './dashboards/ProducerDashboard';
 import AffiliateDashboard from './dashboards/AffiliateDashboard';
 import ClientDashboard from './dashboards/ClientDashboard';
 
+// Admin Components
+import AdminProducts from '../components/admin/AdminProducts';
+import AdminUsers from '../components/admin/AdminUsers';
+import AdminOrders from '../components/admin/AdminOrders';
+import AdminDeliveryFees from '../components/admin/AdminDeliveryFees';
+import AdminWithdrawals from '../components/admin/AdminWithdrawals';
+
+// Producer Components
+import ProducerAddProduct from '../components/producer/ProducerAddProduct';
+import ProducerProducts from '../components/producer/ProducerProducts';
+import ProducerOrders from '../components/producer/ProducerOrders';
+import ProducerWallet from '../components/producer/ProducerWallet';
+
 // Placeholder/Future pages
 const Placeholder = ({ title }: { title: string }) => (
   <div className="flex items-center justify-center min-h-[400px] border border-dashed border-zinc-800 rounded-3xl text-zinc-500">
@@ -38,21 +51,21 @@ export default function Dashboard({ user }: { user: User }) {
             {/* ADM Routes */}
             {user.role === 'ADM' && (
               <>
-                <Route path="approve-products" element={<Placeholder title="Aprovar Produtos" />} />
-                <Route path="manage-users" element={<Placeholder title="Gerenciar Usuários" />} />
-                <Route path="manage-orders" element={<Placeholder title="Gerenciar Pedidos" />} />
-                <Route path="delivery-fees" element={<Placeholder title="Taxas de Entrega" />} />
-                <Route path="withdrawals" element={<Placeholder title="Saques" />} />
+                <Route path="approve-products" element={<AdminProducts />} />
+                <Route path="manage-users" element={<AdminUsers />} />
+                <Route path="manage-orders" element={<AdminOrders />} />
+                <Route path="delivery-fees" element={<AdminDeliveryFees />} />
+                <Route path="withdrawals" element={<AdminWithdrawals />} />
               </>
             )}
 
             {/* Producer Routes */}
             {user.role === 'PRODUTOR' && (
               <>
-                <Route path="add-product" element={<Placeholder title="Adicionar Produto" />} />
-                <Route path="my-products" element={<Placeholder title="Meus Produtos" />} />
-                <Route path="producer-orders" element={<Placeholder title="Minhas Vendas" />} />
-                <Route path="wallet" element={<Placeholder title="Minha Carteira" />} />
+                <Route path="add-product" element={<ProducerAddProduct user={user} />} />
+                <Route path="my-products" element={<ProducerProducts user={user} />} />
+                <Route path="producer-orders" element={<ProducerOrders user={user} />} />
+                <Route path="wallet" element={<ProducerWallet user={user} />} />
               </>
             )}
 

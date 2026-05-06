@@ -74,14 +74,16 @@ export default function AdmDashboard() {
 
   const menuItems = [
     { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'products', label: 'Produtos', icon: Package },
+    { id: 'products', label: 'Produtos Pendentes', icon: Package },
     { id: 'users', label: 'Utilizadores', icon: UsersIcon },
-    { id: 'orders', label: 'Pedidos', icon: TrendingUp },
-    { id: 'fees', label: 'Taxa Entrega', icon: Truck },
-    { id: 'withdrawals', label: 'Saques', icon: CreditCard },
+    { id: 'orders', label: 'Todos os Pedidos', icon: TrendingUp },
+    { id: 'fees', label: 'Taxas de Entrega', icon: Truck },
+    { id: 'withdrawals', label: 'Saques Pendentes', icon: CreditCard },
   ];
 
   if (loading) return <div className="p-8 text-center text-zinc-500">A processar dados do sistema...</div>;
+
+  console.log('AdmDashboard renderizado. ActiveTab:', activeTab);
 
   return (
     <div className="flex flex-col lg:flex-row gap-8">

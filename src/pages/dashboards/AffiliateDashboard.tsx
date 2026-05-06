@@ -13,12 +13,19 @@ import {
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { motion } from 'motion/react';
 import { Link } from 'react-router-dom';
+import WithdrawModal from '../../components/WithdrawModal';
 
 export default function AffiliateDashboard({ user }: { user: User }) {
   const [links, setLinks] = useState<AffiliateLink[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, commission: 0 });
   const [wallet, setWallet] = useState<{ balance: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
+
+  async function fetchWallet() {
+    const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single();
+    if (data) setWallet(data);
+  }
 
   useEffect(() => {
     async function fetchData() {
@@ -36,10 +43,6 @@ export default function AffiliateDashboard({ user }: { user: User }) {
       if (walletData) setWallet(walletData);
 
       const totalSalesValue = salesData?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
-      // In this system, maybe affiliates get a cut of the commission? 
-      // Let's assume for simplicity they get a specific amount, or 5% of sale.
-      // But user didn't specify commission for affiliates, just "Comissão da plataforma: 10%".
-      // I'll assume they get half of the platform commission (5%) for now as a placeholder.
       setStats({
         totalSales: salesData?.length || 0,
         commission: totalSalesValue * 0.05
@@ -60,6 +63,13 @@ export default function AffiliateDashboard({ user }: { user: User }) {
 
   return (
     <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+      <WithdrawModal 
+        isOpen={isWithdrawOpen} 
+        onClose={() => setIsWithdrawOpen(false)} 
+        balance={wallet?.balance || 0}
+        userId={user.id}
+        onSuccess={fetchWallet}
+      />
       <div>
         <h1 className="text-3xl font-black mb-2">Painel de Afiliado</h1>
         <p className="text-zinc-500">Promova produtos e ganhe comissões por cada venda realizada.</p>
@@ -90,8 +100,11 @@ export default function AffiliateDashboard({ user }: { user: User }) {
           <p className="text-zinc-500 text-sm font-medium mb-1">Saldo da Carteira</p>
           <div className="flex items-end justify-between">
             <p className="text-3xl font-black">{formatCurrency(wallet?.balance || 0)}</p>
-            <button className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all">
-              Sacar (200 Kz)
+            <button 
+              onClick={() => setIsWithdrawOpen(true)}
+              className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all"
+            >
+              Solicitar Saque
             </button>
           </div>
         </div>
