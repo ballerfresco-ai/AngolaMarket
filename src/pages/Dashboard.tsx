@@ -7,6 +7,7 @@ import AdmDashboard from './dashboards/AdmDashboard';
 import ProducerDashboard from './dashboards/ProducerDashboard';
 import AffiliateDashboard from './dashboards/AffiliateDashboard';
 import ClientDashboard from './dashboards/ClientDashboard';
+import Notifications from './Notifications';
 
 // Admin Components
 import AdminProducts from '../components/admin/AdminProducts';
@@ -80,6 +81,7 @@ export default function Dashboard({ user }: { user: User }) {
 
             {/* Client/General Routes */}
             <Route path="profile" element={<Placeholder title="Meu Perfil" />} />
+            <Route path="notifications" element={<Notifications user={user} />} />
           </Routes>
         </div>
       </main>

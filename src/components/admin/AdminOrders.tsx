@@ -7,11 +7,29 @@ import { formatCurrency, formatDate } from '../../lib/utils';
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updateLoading, setUpdateLoading] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  async function updateStatus(orderId: string, type: 'status' | 'delivery_status', newValue: string) {
+    setUpdateLoading(orderId);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ [type]: newValue })
+        .eq('id', orderId);
+      
+      if (error) throw error;
+      setOrders(orders.map(o => o.id === orderId ? { ...o, [type]: newValue } : o) as any);
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+    } finally {
+      setUpdateLoading(null);
+    }
+  }
 
   async function fetchOrders() {
     const { data } = await supabase
@@ -28,6 +46,12 @@ export default function AdminOrders() {
     'PROCESSANDO': 'bg-blue-500/10 text-blue-500 border-blue-500/20',
     'ENTREGUE': 'bg-green-500/10 text-green-500 border-green-500/20',
     'CANCELADO': 'bg-red-500/10 text-red-500 border-red-500/20',
+  };
+
+  const deliveryStatusColors: any = {
+    'PENDENTE': 'bg-zinc-800 text-zinc-400',
+    'EM_ENTREGA': 'bg-blue-600/10 text-blue-500 border-blue-600/20',
+    'ENTREGUE': 'bg-green-600/10 text-green-500 border-green-600/20',
   };
 
   const filteredOrders = orders.filter(o => 
@@ -68,6 +92,7 @@ export default function AdminOrders() {
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Total</th>
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Data</th>
                 <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-4 text-xs font-bold text-zinc-500 uppercase tracking-wider">Entrega</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800">
@@ -92,9 +117,29 @@ export default function AdminOrders() {
                     {formatDate(order.created_at)}
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase border ${statusColors[order.status]}`}>
-                      {order.status}
-                    </span>
+                    <select 
+                      value={order.status}
+                      onChange={(e) => updateStatus(order.id, 'status', e.target.value)}
+                      disabled={updateLoading === order.id}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border bg-zinc-950 outline-none focus:border-red-600 ${statusColors[order.status]}`}
+                    >
+                      <option value="PENDENTE">PENDENTE</option>
+                      <option value="PROCESSANDO">PROCESSANDO</option>
+                      <option value="ENTREGUE">ENTREGUE</option>
+                      <option value="CANCELADO">CANCELADO</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                    <select 
+                      value={order.delivery_status || 'PENDENTE'}
+                      onChange={(e) => updateStatus(order.id, 'delivery_status', e.target.value)}
+                      disabled={updateLoading === order.id}
+                      className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase border bg-zinc-950 outline-none focus:border-red-600 ${deliveryStatusColors[order.delivery_status || 'PENDENTE']}`}
+                    >
+                      <option value="PENDENTE">PENDENTE</option>
+                      <option value="EM_ENTREGA">EM ENTREGA</option>
+                      <option value="ENTREGUE">ENTREGUE</option>
+                    </select>
                   </td>
                 </tr>
               ))}

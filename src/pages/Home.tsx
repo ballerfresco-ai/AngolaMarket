@@ -17,6 +17,7 @@ export default function Home({ user }: { user: User | null }) {
         .from('products')
         .select('*')
         .eq('status', 'APROVADO')
+        .order('is_featured', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (data) setProducts(data);
@@ -142,8 +143,15 @@ export default function Home({ user }: { user: User | null }) {
                     alt={p.name}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
-                  <div className="absolute top-3 right-3 bg-zinc-950/80 backdrop-blur px-2 py-1 rounded-md text-xs font-bold text-red-500 border border-red-500/20">
-                    COD Disponível
+                  <div className="absolute top-3 left-3 flex flex-col gap-2">
+                    {p.is_featured && (
+                      <div className="bg-yellow-500 text-black px-2 py-1 rounded-md text-[10px] font-black uppercase tracking-widest shadow-lg">
+                        🔥 Destaque
+                      </div>
+                    )}
+                    <div className="bg-zinc-950/80 backdrop-blur px-2 py-1 rounded-md text-[10px] font-black text-red-500 border border-red-500/20 uppercase tracking-widest">
+                      COD Disponível
+                    </div>
                   </div>
                 </Link>
                 <div className="p-4 flex-1 flex flex-col">

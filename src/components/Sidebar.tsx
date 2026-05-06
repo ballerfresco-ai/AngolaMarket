@@ -12,14 +12,44 @@ import {
   MapPin,
   CheckCircle,
   Truck,
-  Link as LinkIcon
+  Link as LinkIcon,
+  Bell
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { User } from '../types';
 import { supabase } from '../lib/supabase';
 import { cn } from '../lib/utils';
 
 export default function Sidebar({ user }: { user: User }) {
+  const [unreadCount, setUnreadCount] = useState(0);
   
+  useEffect(() => {
+    async function fetchUnread() {
+      const { count } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_read', false);
+      
+      setUnreadCount(count || 0);
+    }
+    fetchUnread();
+
+    const channel = supabase
+      .channel('notifications')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'notifications',
+        filter: `user_id=eq.${user.id}`
+      }, () => {
+        fetchUnread();
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [user.id]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -28,6 +58,7 @@ export default function Sidebar({ user }: { user: User }) {
   const menuItems = {
     ADM: [
       { path: '/dashboard', label: 'Início', icon: LayoutDashboard },
+      { path: '/dashboard/notifications', label: 'Notificações', icon: Bell, badge: true },
       { path: '/dashboard/approve-products', label: 'Produtos Pendentes', icon: Package },
       { path: '/dashboard/manage-users', label: 'Utilizadores', icon: Users },
       { path: '/dashboard/manage-orders', label: 'Todos os Pedidos', icon: ShoppingBag },
@@ -36,18 +67,21 @@ export default function Sidebar({ user }: { user: User }) {
     ],
     PRODUTOR: [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/dashboard/notifications', label: 'Notificações', icon: Bell, badge: true },
       { path: '/dashboard/my-products', label: 'Meus Produtos', icon: Package },
       { path: '/dashboard/producer-orders', label: 'Vendas', icon: ShoppingCart },
       { path: '/dashboard/wallet', label: 'Carteira', icon: Wallet },
     ],
     AFILIADO: [
       { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/dashboard/notifications', label: 'Notificações', icon: Bell, badge: true },
       { path: '/dashboard/marketplace', label: 'Produtos', icon: Package },
       { path: '/dashboard/affiliate-links', label: 'Meus Links', icon: LinkIcon },
       { path: '/dashboard/wallet', label: 'Carteira', icon: Wallet },
     ],
     CLIENTE: [
       { path: '/dashboard', label: 'Meus Pedidos', icon: ShoppingCart },
+      { path: '/dashboard/notifications', label: 'Notificações', icon: Bell, badge: true },
       { path: '/dashboard/profile', label: 'Perfil', icon: Settings },
     ]
   };
@@ -70,7 +104,7 @@ export default function Sidebar({ user }: { user: User }) {
             to={item.path}
             end={item.path === '/dashboard'}
             className={({ isActive }) => cn(
-              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group",
+              "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all group relative",
               isActive 
                 ? "bg-red-600 text-white shadow-md shadow-red-600/20" 
                 : "text-zinc-500 hover:text-white hover:bg-zinc-900"
@@ -78,6 +112,11 @@ export default function Sidebar({ user }: { user: User }) {
           >
             <item.icon className="w-5 h-5" />
             {item.label}
+            {(item as any).badge && unreadCount > 0 && (
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-zinc-950">
+                {unreadCount}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

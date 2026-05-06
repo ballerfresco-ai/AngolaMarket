@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   full_name TEXT NOT NULL,
+  phone TEXT,
   role TEXT NOT NULL DEFAULT 'CLIENTE' CHECK (role IN ('ADM', 'PRODUTOR', 'AFILIADO', 'CLIENTE')),
   neighborhood TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -22,6 +23,8 @@ CREATE TABLE IF NOT EXISTS public.products (
   status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'APROVADO')),
   image_url TEXT,
   commission_rate DECIMAL DEFAULT 0.1,
+  affiliate_commission_rate DECIMAL DEFAULT 0.05,
+  is_featured BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -36,6 +39,9 @@ CREATE TABLE IF NOT EXISTS public.orders (
   delivery_fee DECIMAL NOT NULL DEFAULT 0,
   total_price DECIMAL NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'PROCESSANDO', 'ENTREGUE', 'CANCELADO')),
+  delivery_status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (delivery_status IN ('PENDENTE', 'EM_ENTREGA', 'ENTREGUE')),
+  coupon_id UUID,
+  discount_amount DECIMAL DEFAULT 0,
   delivery_neighborhood TEXT NOT NULL,
   delivery_address TEXT NOT NULL,
   client_phone TEXT NOT NULL,
@@ -77,6 +83,36 @@ CREATE TABLE IF NOT EXISTS public.affiliate_links (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS public.reviews (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  client_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  product_id UUID REFERENCES public.products(id) ON DELETE CASCADE,
+  producer_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.coupons (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  discount_value DECIMAL NOT NULL,
+  min_purchase DECIMAL DEFAULT 0,
+  expiry_date TIMESTAMPTZ,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.notifications (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  title TEXT NOT NULL,
+  message TEXT NOT NULL,
+  is_read BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- 2. RLS (Row Level Security) Policies
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
@@ -85,6 +121,9 @@ ALTER TABLE wallets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE withdrawals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE delivery_fees ENABLE ROW LEVEL SECURITY;
 ALTER TABLE affiliate_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE reviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coupons ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
 
 -- Ensure only one ADM can exist
 CREATE UNIQUE INDEX IF NOT EXISTS unique_admin_role ON users (role) WHERE (role = 'ADM');
@@ -136,11 +175,23 @@ BEGIN
     DROP POLICY IF EXISTS "Users can create withdrawals" ON withdrawals;
     DROP POLICY IF EXISTS "Users can view their own withdrawals" ON withdrawals;
     DROP POLICY IF EXISTS "Admins can manage all withdrawals" ON withdrawals;
+
+    -- Reviews
+    DROP POLICY IF EXISTS "Anyone can view reviews" ON reviews;
+    DROP POLICY IF EXISTS "Clients can create reviews" ON reviews;
+
+    -- Coupons
+    DROP POLICY IF EXISTS "Anyone can view active coupons" ON coupons;
+    DROP POLICY IF EXISTS "Admins can manage coupons" ON coupons;
+
+    -- Notifications
+    DROP POLICY IF EXISTS "Users can view their own notifications" ON notifications;
+    DROP POLICY IF EXISTS "Users can update their own notifications" ON notifications;
 END $$;
 
 -- Usuários: Políticas
 CREATE POLICY "Users can insert their own profile" ON users FOR INSERT WITH CHECK (auth.uid() = id);
-CREATE POLICY "Users can view their own profile" ON users FOR SELECT USING (auth.uid() = id);
+CREATE POLICY "Profiles are public" ON users FOR SELECT USING (true);
 CREATE POLICY "Users can update their own profile" ON users FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "Admins can view all profiles" ON users FOR SELECT USING (public.is_admin());
 
@@ -174,6 +225,23 @@ CREATE POLICY "Admins can view all orders" ON orders FOR SELECT USING (public.is
 -- Carteiras: Políticas
 CREATE POLICY "Users can view their own wallet" ON wallets FOR SELECT USING (auth.uid() = user_id);
 
+-- Saques: Políticas
+CREATE POLICY "Users can create withdrawals" ON withdrawals FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can view their own withdrawals" ON withdrawals FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Admins can manage all withdrawals" ON withdrawals FOR ALL USING (public.is_admin());
+
+-- Reviews: Políticas
+CREATE POLICY "Anyone can view reviews" ON reviews FOR SELECT USING (true);
+CREATE POLICY "Clients can create reviews" ON reviews FOR INSERT WITH CHECK (auth.uid() = client_id);
+
+-- Coupons: Políticas
+CREATE POLICY "Anyone can view active coupons" ON coupons FOR SELECT USING (is_active = true);
+CREATE POLICY "Admins can manage coupons" ON coupons FOR ALL USING (public.is_admin());
+
+-- Notifications: Políticas
+CREATE POLICY "Users can view their own notifications" ON notifications FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can update their own notifications" ON notifications FOR UPDATE USING (auth.uid() = user_id);
+
 -- Taxas de Entrega: Políticas
 CREATE POLICY "Anyone can view delivery fees" ON delivery_fees FOR SELECT USING (true);
 CREATE POLICY "Admins can manage delivery fees" ON delivery_fees FOR ALL USING (public.is_admin());
@@ -183,34 +251,46 @@ CREATE OR REPLACE FUNCTION public.handle_order_completion()
 RETURNS trigger AS $$
 DECLARE
   v_product_price DECIMAL;
-  v_commission DECIMAL;
+  v_platform_commission DECIMAL;
+  v_affiliate_commission_rate DECIMAL;
   v_affiliate_cut DECIMAL;
   v_producer_cut DECIMAL;
+  v_product_id UUID;
 BEGIN
-  -- Only act when order is set to 'ENTREGUE'
-  IF NEW.status = 'ENTREGUE' AND OLD.status != 'ENTREGUE' THEN
-    v_product_price := NEW.total_price;
-    v_commission := v_product_price * 0.10; -- 10% Platform fee
+  -- Only act when order delivery_status is set to 'ENTREGUE'
+  -- Existing 'status' is for order processing, but they asked for 'delivery_status'
+  IF NEW.delivery_status = 'ENTREGUE' AND OLD.delivery_status != 'ENTREGUE' THEN
+    v_product_price := NEW.total_price - NEW.delivery_fee + NEW.discount_amount;
+    v_platform_commission := v_product_price * 0.10; -- 10% Platform fee
     v_affiliate_cut := 0;
 
-    -- If there's an affiliate, they get 5% of the total price (half of commission)
+    -- Get product specific affiliate commission rate
+    SELECT affiliate_commission_rate INTO v_affiliate_commission_rate 
+    FROM public.products WHERE id = NEW.product_id;
+
+    -- If there's an affiliate, they get their defined cut
     IF NEW.affiliate_id IS NOT NULL THEN
-      v_affiliate_cut := v_product_price * 0.05;
+      v_affiliate_cut := v_product_price * COALESCE(v_affiliate_commission_rate, 0.05);
       
       UPDATE public.wallets 
       SET balance = balance + v_affiliate_cut, updated_at = NOW()
       WHERE user_id = NEW.affiliate_id;
+
+      -- Notify Affiliate
+      INSERT INTO public.notifications (user_id, type, title, message)
+      VALUES (NEW.affiliate_id, 'SALE', 'Nova venda realizada!', 'Ganhou ' || v_affiliate_cut || ' Kz em comissão.');
     END IF;
 
-    -- Producer gets the rest (Total - Platform Commission)
-    -- Actually, if affiliate gets 5%, platform gets 5%, or does platform always get 10%?
-    -- Let's say: Producer gets 90%. If there is an affiliate, the 10% commission is split.
-    -- Or: Producer gets 85%, Affiliate 5%, Platform 10%.
-    v_producer_cut := v_product_price - v_commission; -- Platform takes 10%
+    -- Producer gets the rest (Total - Platform Commission - Affiliate Commission)
+    v_producer_cut := v_product_price - v_platform_commission - v_affiliate_cut;
     
     UPDATE public.wallets 
     SET balance = balance + v_producer_cut, updated_at = NOW()
     WHERE user_id = NEW.producer_id;
+
+    -- Notify Producer
+    INSERT INTO public.notifications (user_id, type, title, message)
+    VALUES (NEW.producer_id, 'SALE', 'Venda entregue!', 'Recebeu ' || v_producer_cut || ' Kz na sua carteira.');
   END IF;
   RETURN NEW;
 END;

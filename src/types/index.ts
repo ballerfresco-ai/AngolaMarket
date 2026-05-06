@@ -4,6 +4,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string;
+  phone?: string;
   role: UserRole;
   neighborhood?: string;
   created_at: string;
@@ -18,8 +19,41 @@ export interface Product {
   producer_id: string;
   status: 'PENDENTE' | 'APROVADO';
   image_url?: string;
+  is_featured?: boolean;
+  affiliate_commission_rate?: number;
   created_at: string;
   commission_rate: number; // usually 0.1 for 10%
+}
+
+export interface Review {
+  id: string;
+  client_id: string;
+  product_id?: string;
+  producer_id?: string;
+  rating: number;
+  comment?: string;
+  created_at: string;
+  client?: User;
+}
+
+export interface Coupon {
+  id: string;
+  code: string;
+  discount_value: number;
+  min_purchase: number;
+  expiry_date?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AppNotification {
+  id: string;
+  user_id: string;
+  type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
 }
 
 export interface Order {
@@ -32,6 +66,9 @@ export interface Order {
   delivery_fee: number;
   total_price: number;
   status: 'PENDENTE' | 'PROCESSANDO' | 'ENTREGUE' | 'CANCELADO';
+  delivery_status: 'PENDENTE' | 'EM_ENTREGA' | 'ENTREGUE';
+  coupon_id?: string;
+  discount_amount?: number;
   delivery_neighborhood: string;
   created_at: string;
   delivery_address: string;

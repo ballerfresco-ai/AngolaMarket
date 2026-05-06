@@ -8,7 +8,10 @@ import {
   Wallet,
   Copy,
   ExternalLink,
-  Plus
+  Plus,
+  Trophy,
+  TrendingUp,
+  Calendar
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { motion } from 'motion/react';
@@ -19,6 +22,7 @@ export default function AffiliateDashboard({ user }: { user: User }) {
   const [links, setLinks] = useState<AffiliateLink[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, commission: 0 });
   const [wallet, setWallet] = useState<{ balance: number } | null>(null);
+  const [ranking, setRanking] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
 
@@ -36,7 +40,7 @@ export default function AffiliateDashboard({ user }: { user: User }) {
       ] = await Promise.all([
         supabase.from('affiliate_links').select('*, product:products(*)').eq('affiliate_id', user.id),
         supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
-        supabase.from('orders').select('*').eq('affiliate_id', user.id).eq('status', 'ENTREGUE')
+        supabase.from('orders').select('*').eq('affiliate_id', user.id).eq('delivery_status', 'ENTREGUE')
       ]);
 
       if (linksData) setLinks(linksData as any);
@@ -45,8 +49,36 @@ export default function AffiliateDashboard({ user }: { user: User }) {
       const totalSalesValue = salesData?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
       setStats({
         totalSales: salesData?.length || 0,
-        commission: totalSalesValue * 0.05
+        commission: totalSalesValue
       });
+
+      // Fetch ranking data
+      const { data: topAffiliates } = await supabase
+        .from('orders')
+        .select('affiliate_id, total_price, users!affiliate_id(full_name)')
+        .not('affiliate_id', 'is', null)
+        .eq('delivery_status', 'ENTREGUE');
+
+      if (topAffiliates) {
+        const rankingMap = topAffiliates.reduce((acc: any, curr: any) => {
+          const id = curr.affiliate_id;
+          if (!acc[id]) {
+            acc[id] = { 
+              name: (curr.users as any)?.full_name || 'Afiliado', 
+              sales: 0, 
+              value: 0 
+            };
+          }
+          acc[id].sales += 1;
+          acc[id].value += Number(curr.total_price);
+          return acc;
+        }, {});
+
+        const rankingArray = Object.values(rankingMap)
+          .sort((a: any, b: any) => b.sales - a.sales)
+          .slice(0, 5);
+        setRanking(rankingArray);
+      }
 
       setLoading(false);
     }
@@ -106,6 +138,77 @@ export default function AffiliateDashboard({ user }: { user: User }) {
             >
               Solicitar Saque
             </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Trophy className="text-yellow-500" />
+            Ranking Semanal de Afiliados
+          </h2>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+            {ranking.map((item, index) => (
+              <div 
+                key={index} 
+                className={`flex items-center gap-4 p-4 border-b border-zinc-800 last:border-0 ${index === 0 ? 'bg-yellow-500/5' : ''}`}
+              >
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                  index === 0 ? 'bg-yellow-500 text-black' : 
+                  index === 1 ? 'bg-zinc-300 text-black' : 
+                  index === 2 ? 'bg-amber-600 text-white' : 
+                  'bg-zinc-800 text-zinc-400'
+                }`}>
+                  {index + 1}
+                </div>
+                <div className="flex-1">
+                  <div className="font-bold text-sm">{item.name}</div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-black">{item.sales} vendas</div>
+                </div>
+                <div className="text-right">
+                  <div className="font-black text-sm text-green-500">{formatCurrency(item.value)}</div>
+                  <div className="text-[10px] text-zinc-500 uppercase font-black px-2 py-0.5 bg-zinc-950 rounded-full inline-block">Valor Gerado</div>
+                </div>
+              </div>
+            ))}
+            {ranking.length === 0 && (
+              <div className="p-12 text-center text-zinc-500 text-sm">
+                Nenhum dado de ranking disponível.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <TrendingUp className="text-blue-500" />
+            Metas e Desempenho
+          </h2>
+          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 space-y-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-zinc-500">Meta de Vendas (Mensal)</span>
+                <span className="font-bold">{stats.totalSales} / 50</span>
+              </div>
+              <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden">
+                <motion.div 
+                   initial={{ width: 0 }}
+                   animate={{ width: `${Math.min(100, (stats.totalSales / 50) * 100)}%` }}
+                   className="h-full bg-blue-500"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">Melhor Dia</div>
+                <div className="text-lg font-bold">Hoje</div>
+              </div>
+              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">Status Ativo</div>
+                <div className="text-lg font-bold text-green-500">Online</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

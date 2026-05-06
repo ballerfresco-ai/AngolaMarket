@@ -10,14 +10,33 @@ import {
   XCircle,
   Truck,
   ExternalLink,
-  ChevronDown
+  ChevronDown,
+  Loader2
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
 
 export default function ProducerOrders({ user }: { user: User }) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [updateLoading, setUpdateLoading] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+
+  async function updateStatus(orderId: string, type: 'status' | 'delivery_status', newValue: string) {
+    setUpdateLoading(orderId);
+    try {
+      const { error } = await supabase
+        .from('orders')
+        .update({ [type]: newValue })
+        .eq('id', orderId);
+      
+      if (error) throw error;
+      setOrders(orders.map(o => o.id === orderId ? { ...o, [type]: newValue } : o));
+    } catch (err) {
+      console.error('Erro ao atualizar status:', err);
+    } finally {
+      setUpdateLoading(null);
+    }
+  }
 
   useEffect(() => {
     fetchOrders();
@@ -60,6 +79,12 @@ export default function ProducerOrders({ user }: { user: User }) {
     'ENVIADO': { label: 'Enviado', color: 'bg-purple-500/10 text-purple-500 border-purple-500/20', icon: Truck },
     'ENTREGUE': { label: 'Entregue', color: 'bg-green-500/10 text-green-500 border-green-500/20', icon: CheckCircle2 },
     'CANCELADO': { label: 'Cancelado', color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
+  };
+
+  const deliveryStatusConfig: any = {
+    'PENDENTE': { label: 'Pendente', color: 'bg-zinc-800 text-zinc-400', icon: Clock },
+    'EM_ENTREGA': { label: 'Em Entrega', color: 'bg-blue-600/10 text-blue-500 border-blue-600/20', icon: Truck },
+    'ENTREGUE': { label: 'Entregue', color: 'bg-green-600/10 text-green-500 border-green-600/20', icon: CheckCircle2 },
   };
 
   if (loading) return <div className="p-8 text-center text-zinc-500">A carregar o seu histórico de vendas...</div>;
@@ -107,14 +132,26 @@ export default function ProducerOrders({ user }: { user: User }) {
                       </div>
                       <h4 className="font-black text-lg tracking-tight">{order.products?.name}</h4>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-col md:flex-row items-end md:items-center gap-3">
                       <div className="text-right">
                         <p className="text-xs text-zinc-500 font-bold uppercase tracking-widest leading-none mb-1">Total Ganho</p>
                         <p className="text-xl font-black text-red-500 tracking-tighter">{formatCurrency(order.total_price)}</p>
                       </div>
-                      <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border flex items-center gap-1.5 ${statusConfig[order.status]?.color}`}>
-                        <StatusIcon className="w-3 h-3" />
-                        {statusConfig[order.status]?.label}
+                      <div className="flex flex-col gap-2">
+                        <div className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border flex items-center gap-1.5 ${statusConfig[order.status]?.color}`}>
+                          <StatusIcon className="w-3 h-3" />
+                          {statusConfig[order.status]?.label}
+                        </div>
+                        <select 
+                          value={order.delivery_status || 'PENDENTE'}
+                          onChange={(e) => updateStatus(order.id, 'delivery_status', e.target.value)}
+                          disabled={updateLoading === order.id}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase border bg-zinc-950 flex items-center gap-1.5 outline-none focus:border-red-600 ${deliveryStatusConfig[order.delivery_status || 'PENDENTE']?.color}`}
+                        >
+                          <option value="PENDENTE">PEDIDO PENDENTE</option>
+                          <option value="EM_ENTREGA">EM ENTREGA</option>
+                          <option value="ENTREGUE">ENTREGUE</option>
+                        </select>
                       </div>
                     </div>
                   </div>

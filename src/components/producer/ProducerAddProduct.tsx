@@ -14,7 +14,9 @@ export default function ProducerAddProduct({ user }: { user: User }) {
     description: '',
     price: '',
     category: 'Eletrônicos',
-    stock: '1'
+    stock: '1',
+    affiliate_commission_rate: '5',
+    is_featured: false
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -65,7 +67,9 @@ export default function ProducerAddProduct({ user }: { user: User }) {
         stock: parseInt(formData.stock),
         image_url: imageUrl,
         producer_id: user.id,
-        status: 'PENDENTE'
+        status: 'PENDENTE',
+        affiliate_commission_rate: parseFloat(formData.affiliate_commission_rate) / 100,
+        is_featured: formData.is_featured
       });
 
       if (error) throw error;
@@ -213,6 +217,39 @@ export default function ProducerAddProduct({ user }: { user: User }) {
                     placeholder="1"
                     className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 outline-none focus:border-red-600 transition-all font-bold"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Comissão Afiliado (%)</label>
+                  <input 
+                    required
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={formData.affiliate_commission_rate}
+                    onChange={(e) => setFormData({...formData, affiliate_commission_rate: e.target.value})}
+                    placeholder="5"
+                    className="w-full bg-zinc-950 border border-zinc-800 rounded-2xl px-4 py-3 outline-none focus:border-red-600 transition-all font-bold"
+                  />
+                  <p className="text-[10px] text-zinc-500">Quanto mais alta, mais afiliados promoverão seu produto.</p>
+                </div>
+                <div className="space-y-3">
+                  <label className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Destaque</label>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({...formData, is_featured: !formData.is_featured})}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-2xl border transition-all ${formData.is_featured ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}`}
+                  >
+                    <span className="font-bold flex items-center gap-2">
+                      {formData.is_featured ? '🔥 Produto em Destaque' : 'Promover Produto'}
+                    </span>
+                    <div className={`w-10 h-5 rounded-full relative transition-colors ${formData.is_featured ? 'bg-yellow-500' : 'bg-zinc-800'}`}>
+                      <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${formData.is_featured ? 'left-6' : 'left-1'}`} />
+                    </div>
+                  </button>
+                  <p className="text-[10px] text-zinc-500 italic">Produtos em destaque aparecem no topo da página inicial.</p>
                 </div>
               </div>
             </div>
