@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { motion } from 'motion/react';
@@ -12,6 +12,7 @@ export default function Register() {
   const [role, setRole] = useState<UserRole>('CLIENTE');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
   const [admExists, setAdmExists] = useState(false);
   const navigate = useNavigate();
 
@@ -33,29 +34,28 @@ export default function Register() {
     setError(null);
 
     try {
-      // 1. Auth Signup
+      // 1. Auth Signup with metadata for the DB trigger
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: fullName,
+            role: role,
+          }
+        }
       });
 
       if (authError) throw authError;
       if (!authData.user) throw new Error('Não foi possível criar o utilizador.');
 
-      // 2. Create User Profile
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email,
-          full_name: fullName,
-          role,
-        });
+      // The profile is now created automatically by the DB switch trigger.
+      // We no longer need to insert manually here.
 
-      if (profileError) throw profileError;
-
-      alert('Registo efectuado com sucesso! Por favor, verifique o seu email (se a confirmação estiver activa) ou faça login.');
-      navigate('/login');
+      setSuccess(true);
+      setTimeout(() => {
+        navigate('/login');
+      }, 3000);
     } catch (err: any) {
       setError(err.message || 'Falha ao registar. Tente novamente.');
     } finally {
@@ -92,6 +92,13 @@ export default function Register() {
             <div className="bg-red-900/20 border border-red-900/50 text-red-500 p-4 rounded-xl text-sm flex items-center gap-2">
               <AlertCircle className="w-4 h-4 shrink-0" />
               {error}
+            </div>
+          )}
+
+          {success && (
+            <div className="bg-green-900/20 border border-green-900/50 text-green-500 p-4 rounded-xl text-sm flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              Registo efectuado com sucesso! Redirecionando para o login...
             </div>
           )}
 

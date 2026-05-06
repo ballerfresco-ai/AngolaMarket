@@ -17,38 +17,91 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout: stop loading after 8 seconds no matter what
+    const timeout = setTimeout(() => {
+      setLoading(loadingState => {
+        if (loadingState) {
+          console.warn('Initialization timed out. Forcing UI render.');
+          return false;
+        }
+        return false;
+      });
+    }, 8000);
+
     // Check initial session
     const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
+      try {
+        console.log('Checking user session...');
+        // Verify if supabase is the dummy or real one
+        if ((supabase as any)._isDummy) {
+          console.warn('Supabase is not configured. Running in limited mode.');
+          setLoading(false);
+          return;
+        }
+
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (profile) setUser(profile);
+        if (sessionError) {
+          console.error('Session error:', sessionError);
+          setLoading(false);
+          return;
+        }
+
+        if (session?.user) {
+          console.log('Session found:', session.user.id);
+          const { data: profile, error: profileError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profileError) {
+            console.error('Profile fetch error:', profileError);
+          }
+
+          if (profile) {
+            console.log('Profile found:', profile.role);
+            setUser(profile);
+          } else {
+            console.warn('Profile not found for user:', session.user.id);
+          }
+        } else {
+          console.log('No session found');
+        }
+      } catch (err) {
+        console.error('Error during site initialization:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
     checkUser();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        const { data: profile } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        if (profile) setUser(profile);
-      } else {
-        setUser(null);
-      }
-    });
+    let subscription: any = null;
+    try {
+      const result = supabase.auth.onAuthStateChange(async (event, session) => {
+        console.log('Auth event:', event);
+        if (session?.user) {
+          const { data: profile } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          if (profile) setUser(profile);
+        } else {
+          setUser(null);
+        }
+      });
+      subscription = result.data?.subscription;
+    } catch (err) {
+      console.warn('Could not set up auth state listener:', err);
+    }
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      if (subscription) subscription.unsubscribe();
+    };
   }, []);
 
   if (loading) {
