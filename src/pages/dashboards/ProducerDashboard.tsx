@@ -1,205 +1,219 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { User, Product, Order } from '../../types';
 import { 
+  BarChart3, 
   Package, 
   ShoppingCart, 
-  Wallet, 
-  Plus,
-  Search,
-  MoreVertical,
-  ChevronRight,
+  Plus, 
+  Search, 
+  Filter,
   TrendingUp,
-  Box
-} from 'lucide-react';
+  LayoutDashboard,
+  Settings,
+  ChevronRight,
+  Handshake,
+  Wallet
+} from 'lucide-react'; 
 import { formatCurrency, formatDate } from '../../lib/utils';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import WithdrawModal from '../../components/WithdrawModal';
+import { motion, AnimatePresence } from 'motion/react';
+import ProducerAddProduct from '../../components/producer/ProducerAddProduct';
+import ProducerProductList from '../../components/producer/ProducerProducts';
+import ProducerOrders from '../../components/producer/ProducerOrders';
+import ProducerAffiliates from '../../components/producer/ProducerAffiliates';
+import { LayoutDashboard as LayoutIcon, Package as PackageIcon, ShoppingCart as OrdersIcon, Handshake as AffiliatesIcon, Plus as PlusIcon } from 'lucide-react';
+
+type Tab = 'overview' | 'products' | 'orders' | 'affiliates' | 'add-product';
 
 export default function ProducerDashboard({ user }: { user: User }) {
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [products, setProducts] = useState<Product[]>([]);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
-  const [salesData, setSalesData] = useState({ count: 0, total: 0 });
-  const [wallet, setWallet] = useState<{ balance: number } | null>(null);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [stats, setStats] = useState({ totalSales: 0, earnings: 0 });
   const [loading, setLoading] = useState(true);
-  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
-
-  async function fetchWallet() {
-    const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single();
-    if (data) setWallet(data);
-  }
 
   useEffect(() => {
     async function fetchData() {
-      const [
-        { data: productsData },
-        { data: walletData },
-        { data: ordersData },
-        { data: recentOrdersData }
-      ] = await Promise.all([
-        supabase.from('products').select('*').eq('producer_id', user.id).order('created_at', { ascending: false }),
-        supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
-        supabase.from('orders').select('*').eq('producer_id', user.id).eq('status', 'ENTREGUE'),
-        supabase.from('orders')
-          .select('*, products:product_id(name, image_url)')
-          .eq('producer_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(5)
-      ]);
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('*')
+        .eq('producer_id', user.id);
+      
+      const { data: ordersData } = await supabase
+        .from('orders')
+        .select('*, product:products(*)')
+        .order('created_at', { ascending: false });
 
+      const producerOrders = (ordersData as any[])?.filter(o => o.product.producer_id === user.id) || [];
+      
       if (productsData) setProducts(productsData);
-      if (walletData) setWallet(walletData);
-      if (recentOrdersData) setRecentOrders(recentOrdersData);
+      if (producerOrders) setOrders(producerOrders);
+
+      const totalValue = producerOrders
+        .filter(o => o.delivery_status === 'ENTREGUE')
+        .reduce((acc, o) => acc + Number(o.total_price), 0);
       
-      const totalSales = ordersData?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
-      setSalesData({ count: ordersData?.length || 0, total: totalSales });
-      
+      setStats({
+        totalSales: producerOrders.length,
+        earnings: totalValue
+      });
       setLoading(false);
     }
     fetchData();
   }, [user.id]);
 
-  if (loading) return <div>Carregando...</div>;
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: LayoutIcon },
+    { id: 'products', label: 'Meus Produtos', icon: PackageIcon },
+    { id: 'orders', label: 'Pedidos', icon: OrdersIcon },
+    { id: 'affiliates', label: 'Afiliados', icon: AffiliatesIcon },
+    { id: 'add-product', label: 'Cadastrar Produto', icon: PlusIcon },
+  ];
+
+  if (loading) return <div className="p-8 text-center text-zinc-500">A carregar painel do produtor...</div>;
 
   return (
-    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-      <WithdrawModal 
-        isOpen={isWithdrawOpen} 
-        onClose={() => setIsWithdrawOpen(false)} 
-        balance={wallet?.balance || 0}
-        userId={user.id}
-        onSuccess={fetchWallet}
-      />
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      {/* Navigation Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-900">
         <div>
-          <h1 className="text-3xl font-black mb-2">Olá, {user.full_name.split(' ')[0]}!</h1>
-          <p className="text-zinc-500">Bem-vindo ao seu painel de produtor.</p>
+          <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Produtor</h1>
+          <p className="text-zinc-500 font-medium italic">Gerencie o seu negócio com precisão e escala.</p>
         </div>
-        <Link 
-          to="/dashboard/add-product"
-          className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-red-600/20"
-        >
-          <Plus className="w-5 h-5" />
-          Novo Produto
-        </Link>
+        <div className="flex bg-zinc-900 border border-zinc-800 p-6 rounded-3xl items-center gap-6 shadow-xl shadow-red-600/5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-600">
+              <TrendingUp className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest leading-none mb-1">Ganhos Totais</p>
+              <p className="text-xl font-black text-white tracking-tighter">{formatCurrency(stats.earnings)}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Stats Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform">
-            <Package className="w-24 h-24" />
-          </div>
-          <p className="text-zinc-500 text-sm font-medium mb-1">Produtos Ativos</p>
-          <p className="text-3xl font-black">{products.filter(p => p.status === 'APROVADO').length}</p>
-          <div className="mt-4 flex items-center gap-2 text-xs text-zinc-400">
-            <span className="bg-zinc-800 px-2 py-0.5 rounded-full">{products.length} Total</span>
-            <span className="bg-yellow-900/20 text-yellow-500 px-2 py-0.5 rounded-full">
-              {products.filter(p => p.status === 'PENDENTE').length} Pendentes
-            </span>
-          </div>
-        </div>
-
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform">
-            <TrendingUp className="w-24 h-24" />
-          </div>
-          <p className="text-zinc-500 text-sm font-medium mb-1">Vendas Concluídas</p>
-          <p className="text-3xl font-black">{salesData.count}</p>
-          <p className="mt-4 text-xs text-zinc-400">
-            Valor bruto: <span className="text-zinc-200 font-bold">{formatCurrency(salesData.total)}</span>
-          </p>
-        </div>
-
-        <div className="bg-red-600 p-6 rounded-3xl text-white relative overflow-hidden group shadow-xl shadow-red-600/40">
-          <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-125 transition-transform">
-            <Wallet className="w-24 h-24" />
-          </div>
-          <p className="text-red-100 text-sm font-medium mb-1 text-opacity-80">Saldo Disponível</p>
-          <p className="text-3xl font-black">{formatCurrency(wallet?.balance || 0)}</p>
-          <button 
-            onClick={() => setIsWithdrawOpen(true)}
-            className="mt-4 bg-white/20 hover:bg-white/30 backdrop-blur-md px-4 py-2 rounded-xl text-xs font-bold transition-all"
+      {/* Tabs */}
+      <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as Tab)}
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${
+              activeTab === tab.id 
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-zinc-800'
+            }`}
           >
-            Solicitar Saque
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
           </button>
-        </div>
+        ))}
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-          <div className="p-6 flex items-center justify-between border-b border-zinc-800">
-            <h3 className="font-bold flex items-center gap-2">
-              <Box className="w-5 h-5 text-red-600" />
-              Meus Produtos Recentes
-            </h3>
-            <Link to="/dashboard/my-products" className="text-xs text-red-500 font-bold hover:underline">Ver tudo</Link>
-          </div>
-          <div className="divide-y divide-zinc-800">
-            {products.slice(0, 5).map((p) => (
-              <div key={p.id} className="p-4 flex items-center gap-4 hover:bg-zinc-800/50 transition-colors">
-                <div className="w-12 h-12 rounded-lg bg-zinc-800 overflow-hidden shrink-0">
-                  <img src={p.image_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
+      <AnimatePresence mode="wait">
+        <motion.div
+           key={activeTab}
+           initial={{ opacity: 0, y: 10 }}
+           animate={{ opacity: 1, y: 0 }}
+           exit={{ opacity: 0, y: -10 }}
+           transition={{ duration: 0.2 }}
+        >
+          {activeTab === 'overview' && (
+            <div className="space-y-8">
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2 group hover:border-red-600/30 transition-all">
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Total Pedidos</p>
+                  <p className="text-4xl font-black tracking-tighter">{stats.totalSales}</p>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-sm truncate">{p.name}</p>
-                  <p className="text-xs text-zinc-500 mt-1">{formatCurrency(p.price)} • Stock: {p.stock}</p>
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2 group hover:border-red-600/30 transition-all">
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Produtos Ativos</p>
+                  <p className="text-4xl font-black tracking-tighter">{products.filter(p => p.status === 'APROVADO').length}</p>
                 </div>
-                <div className={`px-2 py-1 rounded-md text-[10px] font-bold ${
-                  p.status === 'APROVADO' ? 'bg-green-900/20 text-green-500' : 'bg-yellow-900/20 text-yellow-500'
-                }`}>
-                  {p.status}
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2 group hover:border-red-600/30 transition-all">
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Aguardando Aprovação</p>
+                  <p className="text-4xl font-black tracking-tighter text-yellow-500">{products.filter(p => p.status === 'PENDENTE').length}</p>
                 </div>
-                <button className="p-2 hover:bg-zinc-700 rounded-full transition-colors">
-                  <MoreVertical className="w-4 h-4 text-zinc-500" />
-                </button>
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2 group hover:border-red-600/30 transition-all">
+                  <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Ticket Médio</p>
+                  <p className="text-4xl font-black tracking-tighter text-red-600">{formatCurrency(stats.earnings / (stats.totalSales || 1))}</p>
+                </div>
               </div>
-            ))}
-            {products.length === 0 && (
-              <div className="p-12 text-center text-zinc-500">
-                <p>Nenhum produto cadastrado ainda.</p>
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden flex flex-col">
-          <div className="p-6 flex items-center justify-between border-b border-zinc-800">
-            <h3 className="font-bold flex items-center gap-2">
-              <ShoppingCart className="w-5 h-5 text-red-600" />
-              Vendas Recentes
-            </h3>
-            <Link to="/dashboard/producer-orders" className="text-xs text-red-500 font-bold hover:underline">Ver todas</Link>
-          </div>
-          <div className="flex-1 divide-y divide-zinc-800 max-h-[400px] overflow-y-auto font-medium">
-             {recentOrders.map((order) => (
-                <div key={order.id} className="p-4 flex items-center justify-between hover:bg-zinc-800/50 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-zinc-800 overflow-hidden shrink-0">
-                      <img src={order.products?.image_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold truncate max-w-[150px]">{order.products?.name}</p>
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{formatDate(order.created_at)}</p>
-                    </div>
+              {/* Recent Orders Overview */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-bold uppercase tracking-tight">Vendas Recentes</h2>
+                    <button onClick={() => setActiveTab('orders')} className="text-xs font-bold text-red-600 hover:underline">Ver Todos</button>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-black text-red-500 tracking-tighter">{formatCurrency(order.total_price)}</p>
-                    <p className="text-[9px] text-zinc-500 font-black uppercase tracking-widest">{order.status}</p>
+                  <div className="space-y-4">
+                    {orders.slice(0, 5).map(order => (
+                      <div key={order.id} className="flex items-center justify-between p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                         <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden bg-zinc-800">
+                               <img src={(order as any).product?.image_url} alt="" className="w-full h-full object-cover" />
+                            </div>
+                            <div>
+                               <p className="text-sm font-bold truncate max-w-[150px]">{(order as any).product?.name}</p>
+                               <p className="text-[10px] text-zinc-500 uppercase tracking-widest">{formatDate(order.created_at)}</p>
+                            </div>
+                         </div>
+                         <div className="text-right">
+                            <p className="font-bold text-white leading-none mb-1">{formatCurrency(order.total_price)}</p>
+                            <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-full ${
+                              order.delivery_status === 'ENTREGUE' ? 'bg-green-500/10 text-green-500' :
+                              order.delivery_status === 'PENDENTE' ? 'bg-yellow-500/10 text-yellow-500' :
+                              'bg-zinc-500/10 text-zinc-500'
+                            }`}>
+                              {order.delivery_status}
+                            </span>
+                         </div>
+                      </div>
+                    ))}
+                    {orders.length === 0 && <p className="text-center py-8 text-zinc-500 italic">Nenhuma venda registada até agora.</p>}
                   </div>
                 </div>
-             ))}
-             {recentOrders.length === 0 && (
-                <div className="p-12 text-center text-zinc-500">
-                   <ShoppingCart className="w-12 h-12 mx-auto opacity-10 mb-4" />
-                   <p className="italic">O seu histórico de vendas aparecerá aqui.</p>
+
+                <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 space-y-6">
+                   <h2 className="text-xl font-bold uppercase tracking-tight">Atalhos Rápidos</h2>
+                   <div className="space-y-3">
+                      <button onClick={() => setActiveTab('add-product')} className="w-full flex items-center justify-between p-4 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded-2xl transition-all group">
+                         <span className="font-bold text-sm">Novo Produto</span>
+                         <PlusIcon className="w-4 h-4 text-red-600 group-hover:scale-125 transition-transform" />
+                      </button>
+                      <button onClick={() => setActiveTab('affiliates')} className="w-full flex items-center justify-between p-4 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded-2xl transition-all group">
+                         <span className="font-bold text-sm">Ver Afiliados</span>
+                         <AffiliatesIcon className="w-4 h-4 text-blue-500 group-hover:scale-125 transition-transform" />
+                      </button>
+                      <button className="w-full flex items-center justify-between p-4 bg-zinc-950 hover:bg-zinc-800 border border-zinc-800 rounded-2xl transition-all group">
+                         <span className="font-bold text-sm">Minha Carteira</span>
+                         <Wallet className="w-4 h-4 text-green-600 group-hover:scale-125 transition-transform" />
+                      </button>
+                   </div>
                 </div>
-             )}
-          </div>
-        </div>
-      </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'products' && (
+            <ProducerProductList user={user} />
+          )}
+
+          {activeTab === 'orders' && (
+            <ProducerOrders user={user} />
+          )}
+
+          {activeTab === 'affiliates' && (
+            <ProducerAffiliates user={user} />
+          )}
+
+          {activeTab === 'add-product' && (
+            <ProducerAddProduct user={user} />
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

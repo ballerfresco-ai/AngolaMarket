@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { Product, User, DeliveryFee } from '../types';
+import { Product, User, DeliveryFee, Review, Coupon } from '../types';
 import { 
   ChevronLeft, 
   ShoppingCart, 

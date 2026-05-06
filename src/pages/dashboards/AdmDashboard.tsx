@@ -196,6 +196,31 @@ function OverviewSection({ stats, recentOrders }: any) {
             ))}
           </div>
         </div>
+
+        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl">
+          <h3 className="font-bold text-lg mb-4 text-white">Ranking de Afiliados</h3>
+          <p className="text-xs text-zinc-500 mb-6">Os parceiros com melhor desempenho.</p>
+          <div className="space-y-4">
+            {[1, 2, 3].map((rank) => (
+              <div key={rank} className="flex items-center gap-4 p-3 bg-zinc-950 rounded-2xl border border-zinc-800/50">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-sm ${
+                  rank === 1 ? 'bg-yellow-500 text-black' : 
+                  rank === 2 ? 'bg-zinc-300 text-black' : 
+                  'bg-orange-600 text-white'
+                }`}>
+                  {rank}
+                </div>
+                <div className="flex-1">
+                  <p className="text-xs font-bold">Afiliado #{rank}</p>
+                  <p className="text-[10px] text-zinc-500">2{5-rank} vendas este mês</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-black text-white">{formatCurrency(150000 / rank)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );

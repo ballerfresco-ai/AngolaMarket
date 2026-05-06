@@ -1,35 +1,35 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { User, Product, Order, AffiliateLink } from '../../types';
+import { User } from '../../types';
 import { 
-  BarChart3, 
-  Link as LinkIcon, 
+  LayoutDashboard, 
+  Package, 
   ShoppingCart, 
-  Wallet,
-  Copy,
-  ExternalLink,
+  Wallet, 
+  Copy, 
+  ExternalLink, 
   Plus,
   Trophy,
   TrendingUp,
-  Calendar
+  Calendar,
+  Handshake,
+  Link as LinkIcon,
+  ChevronRight
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
-import { motion } from 'motion/react';
-import { Link } from 'react-router-dom';
-import WithdrawModal from '../../components/WithdrawModal';
+import { motion, AnimatePresence } from 'motion/react';
+import AffiliateBrowseProducts from '../../components/affiliate/AffiliateBrowseProducts';
+import AffiliateLinks from '../../components/affiliate/AffiliateLinks';
+
+type Tab = 'overview' | 'orders' | 'browse' | 'links' | 'wallet';
 
 export default function AffiliateDashboard({ user }: { user: User }) {
-  const [links, setLinks] = useState<AffiliateLink[]>([]);
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [links, setLinks] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, commission: 0 });
   const [wallet, setWallet] = useState<{ balance: number } | null>(null);
   const [ranking, setRanking] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isWithdrawOpen, setIsWithdrawOpen] = useState(false);
-
-  async function fetchWallet() {
-    const { data } = await supabase.from('wallets').select('balance').eq('user_id', user.id).single();
-    if (data) setWallet(data);
-  }
 
   useEffect(() => {
     async function fetchData() {
@@ -38,14 +38,14 @@ export default function AffiliateDashboard({ user }: { user: User }) {
         { data: walletData },
         { data: salesData }
       ] = await Promise.all([
-        supabase.from('affiliate_links').select('*, product:products(*)').eq('affiliate_id', user.id),
+        supabase.from('affiliate_requests').select('*, product:products(*)').eq('affiliate_id', user.id).eq('status', 'APROVADO'),
         supabase.from('wallets').select('balance').eq('user_id', user.id).single(),
         supabase.from('orders').select('*').eq('affiliate_id', user.id).eq('delivery_status', 'ENTREGUE')
       ]);
 
       if (linksData) setLinks(linksData as any);
       if (walletData) setWallet(walletData);
-
+      
       const totalSalesValue = salesData?.reduce((acc, o) => acc + Number(o.total_price), 0) || 0;
       setStats({
         totalSales: salesData?.length || 0,
@@ -85,188 +85,245 @@ export default function AffiliateDashboard({ user }: { user: User }) {
     fetchData();
   }, [user.id]);
 
-  const copyToClipboard = (code: string) => {
-    const url = `${window.location.origin}/product/${code}?ref=${code}`;
-    navigator.clipboard.writeText(url);
-    alert('Link copiado para a área de transferência!');
-  };
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
+    { id: 'browse', label: 'Afiliar-se', icon: Handshake },
+    { id: 'links', label: 'Minhas Afiliações', icon: LinkIcon },
+    { id: 'wallet', label: 'Carteira', icon: Wallet }
+  ];
 
-  if (loading) return <div>Carregando...</div>;
+  if (loading) return <div className="p-8 text-center text-zinc-500">A carregar painel do afiliado...</div>;
 
   return (
-    <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-      <WithdrawModal 
-        isOpen={isWithdrawOpen} 
-        onClose={() => setIsWithdrawOpen(false)} 
-        balance={wallet?.balance || 0}
-        userId={user.id}
-        onSuccess={fetchWallet}
-      />
-      <div>
-        <h1 className="text-3xl font-black mb-2">Painel de Afiliado</h1>
-        <p className="text-zinc-500">Promova produtos e ganhe comissões por cada venda realizada.</p>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-900">
+        <div>
+          <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Afiliado</h1>
+          <p className="text-zinc-500 font-medium">Bem-vindo, <span className="text-white font-bold">{user.full_name}</span>. Pronto para vender hoje?</p>
+        </div>
+        <div className="flex bg-zinc-900 border border-zinc-800 p-6 rounded-3xl items-center gap-6 shadow-xl shadow-red-600/5">
+          <div className="flex items-center gap-4 border-r border-zinc-800 pr-6">
+            <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-600">
+              <Wallet className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest leading-none mb-1">Saldo Total</p>
+              <p className="text-xl font-black text-white tracking-tighter">{formatCurrency(wallet?.balance || 0)}</p>
+            </div>
+          </div>
+          <motion.button 
+             whileHover={{ scale: 1.02 }}
+             whileTap={{ scale: 0.98 }}
+             className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl uppercase tracking-widest transition-all shadow-lg shadow-red-600/20"
+          >
+            Sacar Agora
+          </motion.button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl">
-          <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl inline-flex mb-4">
-            <ShoppingCart className="w-5 h-5 text-red-600" />
-          </div>
-          <p className="text-zinc-500 text-sm font-medium mb-1">Vendas Totais</p>
-          <p className="text-3xl font-black">{stats.totalSales}</p>
-        </div>
+      {/* Navigation Tabs */}
+      <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id as Tab)}
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${
+              activeTab === tab.id 
+                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-zinc-800'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
+      </div>
 
-        <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl">
-          <div className="p-3 bg-zinc-950 border border-zinc-800 rounded-xl inline-flex mb-4">
-            <BarChart3 className="w-5 h-5 text-red-600" />
-          </div>
-          <p className="text-zinc-500 text-sm font-medium mb-1">Comissões Acumuladas</p>
-          <p className="text-3xl font-black">{formatCurrency(stats.commission)}</p>
-        </div>
-
-        <div className="bg-zinc-900 border border-red-600/30 p-6 rounded-3xl bg-gradient-to-br from-zinc-900 to-red-600/10">
-          <div className="p-3 bg-red-600 rounded-xl inline-flex mb-4 shadow-lg shadow-red-600/20">
-            <Wallet className="w-5 h-5 text-white" />
-          </div>
-          <p className="text-zinc-500 text-sm font-medium mb-1">Saldo da Carteira</p>
-          <div className="flex items-end justify-between">
-            <p className="text-3xl font-black">{formatCurrency(wallet?.balance || 0)}</p>
-            <button 
-              onClick={() => setIsWithdrawOpen(true)}
-              className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg font-bold transition-all"
+      {/* Main Content Area */}
+      <div className="mt-8">
+        <AnimatePresence mode="wait">
+          {activeTab === 'overview' && (
+            <motion.div 
+              key="overview"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-8"
             >
-              Solicitar Saque
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <Trophy className="text-yellow-500" />
-            Ranking Semanal de Afiliados
-          </h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
-            {ranking.map((item, index) => (
-              <div 
-                key={index} 
-                className={`flex items-center gap-4 p-4 border-b border-zinc-800 last:border-0 ${index === 0 ? 'bg-yellow-500/5' : ''}`}
-              >
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                  index === 0 ? 'bg-yellow-500 text-black' : 
-                  index === 1 ? 'bg-zinc-300 text-black' : 
-                  index === 2 ? 'bg-amber-600 text-white' : 
-                  'bg-zinc-800 text-zinc-400'
-                }`}>
-                  {index + 1}
+              {/* Stats Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Total de Vendas</p>
+                    <Plus className="w-4 h-4 text-red-600" />
+                  </div>
+                  <p className="text-4xl font-black tracking-tighter">{stats.totalSales}</p>
+                  <p className="text-xs text-zinc-600 font-medium">Desde o início</p>
                 </div>
-                <div className="flex-1">
-                  <div className="font-bold text-sm">{item.name}</div>
-                  <div className="text-[10px] text-zinc-500 uppercase font-black">{item.sales} vendas</div>
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Valor Gerado</p>
+                    <TrendingUp className="w-4 h-4 text-green-500" />
+                  </div>
+                  <p className="text-4xl font-black tracking-tighter text-green-500">{formatCurrency(stats.commission)}</p>
+                  <p className="text-xs text-zinc-600 font-medium">Lucro bruto consolidado</p>
                 </div>
-                <div className="text-right">
-                  <div className="font-black text-sm text-green-500">{formatCurrency(item.value)}</div>
-                  <div className="text-[10px] text-zinc-500 uppercase font-black px-2 py-0.5 bg-zinc-950 rounded-full inline-block">Valor Gerado</div>
+                <div className="bg-zinc-900 border border-zinc-800 p-8 rounded-3xl space-y-2">
+                  <div className="flex justify-between items-start">
+                    <p className="text-xs font-black text-zinc-500 uppercase tracking-widest">Links Ativos</p>
+                    <ExternalLink className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <p className="text-4xl font-black tracking-tighter">{links.length}</p>
+                  <p className="text-xs text-zinc-600 font-medium">Produtos em promoção</p>
                 </div>
               </div>
-            ))}
-            {ranking.length === 0 && (
-              <div className="p-12 text-center text-zinc-500 text-sm">
-                Nenhum dado de ranking disponível.
-              </div>
-            )}
-          </div>
-        </div>
 
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <TrendingUp className="text-blue-500" />
-            Metas e Desempenho
-          </h2>
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 space-y-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm mb-1">
-                <span className="text-zinc-500">Meta de Vendas (Mensal)</span>
-                <span className="font-bold">{stats.totalSales} / 50</span>
-              </div>
-              <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden">
-                <motion.div 
-                   initial={{ width: 0 }}
-                   animate={{ width: `${Math.min(100, (stats.totalSales / 50) * 100)}%` }}
-                   className="h-full bg-blue-500"
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
-                <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">Melhor Dia</div>
-                <div className="text-lg font-bold">Hoje</div>
-              </div>
-              <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
-                <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">Status Ativo</div>
-                <div className="text-lg font-bold text-green-500">Online</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* My Links Section */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold flex items-center gap-2">
-            <LinkIcon className="text-red-600" />
-            Meus Links de Afiliado
-          </h2>
-          <Link to="/dashboard/marketplace" className="bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all">
-            <Plus className="w-4 h-4" />
-            Gerar Novo Link
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {links.map((link) => (
-            <div key={link.id} className="bg-zinc-900 border border-zinc-800 p-5 rounded-3xl group flex flex-col gap-4">
-              <div className="flex gap-4">
-                <div className="w-16 h-16 rounded-xl bg-zinc-800 overflow-hidden shrink-0">
-                  <img src={link.product?.image_url || 'https://via.placeholder.com/150'} alt="" className="w-full h-full object-cover" />
+              {/* Ranking & Performance */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <Trophy className="text-yellow-500" />
+                    Ranking de Afiliados
+                  </h2>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-3xl overflow-hidden">
+                    {ranking.map((item, index) => (
+                      <div 
+                        key={index} 
+                        className={`flex items-center gap-4 p-4 border-b border-zinc-800 last:border-0 ${index === 0 ? 'bg-yellow-500/5' : ''}`}
+                      >
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                          index === 0 ? 'bg-yellow-500 text-black' : 
+                          index === 1 ? 'bg-zinc-300 text-black' : 
+                          index === 2 ? 'bg-amber-600 text-white' : 
+                          'bg-zinc-800 text-zinc-400'
+                        }`}>
+                          {index + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-bold text-sm">{item.name}</div>
+                          <div className="text-[10px] text-zinc-500 uppercase font-black">{item.sales} vendas</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="font-black text-sm text-green-500">{formatCurrency(item.value)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-bold text-lg truncate group-hover:text-red-500 transition-colors">{link.product?.name}</h3>
-                  <p className="text-zinc-500 text-sm">{formatCurrency(link.product?.price || 0)}</p>
+
+                <div className="space-y-4">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <TrendingUp className="text-blue-500" />
+                    Performance de Conversão
+                  </h2>
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 space-y-6">
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-zinc-500">Meta Semanal</span>
+                        <span className="font-bold">12 / 20 vendas</span>
+                      </div>
+                      <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden">
+                        <motion.div 
+                           initial={{ width: 0 }}
+                           animate={{ width: '60%' }}
+                           className="h-full bg-blue-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-6">
+                      <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                        <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">CTR Médio</div>
+                        <div className="text-lg font-bold">4.2%</div>
+                      </div>
+                      <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl">
+                        <div className="text-[10px] text-zinc-500 uppercase font-black mb-1">EPC</div>
+                        <div className="text-lg font-bold">450 Kz</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => copyToClipboard(link.id)}
-                  className="flex-1 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 p-3 rounded-xl flex items-center justify-center gap-2 text-sm font-bold transition-all"
-                >
-                  <Copy className="w-4 h-4" />
-                  Copiar Link
-                </button>
-                <Link 
-                  to={`/product/${link.product_id}`}
-                  className="p-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl transition-all"
-                >
-                  <ExternalLink className="w-4 h-4" />
-                </Link>
-              </div>
-            </div>
-          ))}
-
-          {links.length === 0 && (
-            <div className="col-span-full py-16 text-center bg-zinc-950/50 border border-dashed border-zinc-800 rounded-3xl">
-              <LinkIcon className="w-12 h-12 text-zinc-800 mx-auto mb-4" />
-              <p className="text-zinc-500 font-medium">Você ainda não gerou nenhum link de afiliado.</p>
-              <Link to="/dashboard/marketplace" className="inline-block mt-4 text-red-500 font-bold hover:underline">
-                Ir para o Mercado
-              </Link>
-            </div>
+            </motion.div>
           )}
-        </div>
+
+          {activeTab === 'orders' && (
+            <motion.div 
+               key="orders"
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -20 }}
+            >
+              <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+                <h2 className="text-xl font-black mb-6 uppercase tracking-tight">Meus Pedidos Gerados</h2>
+                <div className="p-12 text-center text-zinc-600 border-2 border-dashed border-zinc-800 rounded-3xl">
+                  <ShoppingCart className="w-12 h-12 mx-auto mb-4" />
+                  <p>Suas vendas aparecerão aqui após processadas pelos produtores.</p>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === 'browse' && (
+            <motion.div 
+               key="browse"
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -20 }}
+            >
+              <AffiliateBrowseProducts user={user} />
+            </motion.div>
+          )}
+
+          {activeTab === 'links' && (
+            <motion.div 
+               key="links"
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -20 }}
+            >
+              <AffiliateLinks user={user} />
+            </motion.div>
+          )}
+
+          {activeTab === 'wallet' && (
+            <motion.div 
+               key="wallet"
+               initial={{ opacity: 0, x: 20 }}
+               animate={{ opacity: 1, x: 0 }}
+               exit={{ opacity: 0, x: -20 }}
+            >
+               <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8">
+                 <h2 className="text-xl font-black mb-6 uppercase tracking-tight">Minha Carteira</h2>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-zinc-950 border border-zinc-800 p-8 rounded-3xl text-center">
+                       <p className="text-xs font-black text-zinc-500 uppercase tracking-widest mb-2">Saldo Disponível para Saque</p>
+                       <p className="text-5xl font-black text-red-600 tracking-tighter mb-6">{formatCurrency(wallet?.balance || 0)}</p>
+                       <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all shadow-xl shadow-red-600/20">
+                         Solicitar Resgate
+                       </button>
+                    </div>
+                    <div className="space-y-4">
+                       <h3 className="font-bold flex items-center gap-2 text-zinc-400">
+                         <Calendar className="w-4 h-4" />
+                         Histórico Recente
+                       </h3>
+                       <div className="space-y-2">
+                          <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-2xl flex justify-between items-center">
+                             <div>
+                                <p className="text-xs font-bold text-white">Venda Afiliado #4521</p>
+                                <p className="text-[10px] text-zinc-500">Ontem às 14:20</p>
+                             </div>
+                             <p className="font-black text-green-500 font-mono">+1.500 Kz</p>
+                          </div>
+                       </div>
+                    </div>
+                 </div>
+               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   );

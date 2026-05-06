@@ -19,10 +19,26 @@ export interface Product {
   producer_id: string;
   status: 'PENDENTE' | 'APROVADO';
   image_url?: string;
+  image_urls?: string[];
   is_featured?: boolean;
   affiliate_commission_rate?: number;
+  subcategory?: string;
+  condition?: 'NOVO' | 'USADO' | 'RECONDICIONADO';
+  color?: string;
+  size?: string;
+  weight?: string;
   created_at: string;
   commission_rate: number; // usually 0.1 for 10%
+}
+
+export interface AffiliateRequest {
+  id: string;
+  affiliate_id: string;
+  product_id: string;
+  status: 'PENDENTE' | 'APROVADO' | 'REJEITADO';
+  created_at: string;
+  affiliate?: User;
+  product?: Product;
 }
 
 export interface Review {

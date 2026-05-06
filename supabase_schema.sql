@@ -22,11 +22,45 @@ CREATE TABLE IF NOT EXISTS public.products (
   producer_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'APROVADO')),
   image_url TEXT,
+  image_urls TEXT[] DEFAULT '{}',
   commission_rate DECIMAL DEFAULT 0.1,
   affiliate_commission_rate DECIMAL DEFAULT 0.05,
+  subcategory TEXT,
+  condition TEXT CHECK (condition IN ('NOVO', 'USADO', 'RECONDICIONADO')),
+  color TEXT,
+  size TEXT,
+  weight TEXT,
   is_featured BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.affiliate_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  affiliate_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  product_id UUID NOT NULL REFERENCES public.products(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'APROVADO', 'REJEITADO')),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- RLS for affiliate_requests
+ALTER TABLE affiliate_requests ENABLE ROW LEVEL SECURITY;
+
+DO $$ 
+BEGIN
+    DROP POLICY IF EXISTS "Users can view their requests" ON affiliate_requests;
+    DROP POLICY IF EXISTS "Affiliates can create requests" ON affiliate_requests;
+    DROP POLICY IF EXISTS "Producers can manage requests for their products" ON affiliate_requests;
+END $$;
+
+CREATE POLICY "Users can view their requests" ON affiliate_requests FOR SELECT USING (auth.uid() = affiliate_id);
+CREATE POLICY "Affiliates can create requests" ON affiliate_requests FOR INSERT WITH CHECK (auth.uid() = affiliate_id);
+CREATE POLICY "Producers can manage requests" ON affiliate_requests FOR ALL USING (
+  EXISTS (
+    SELECT 1 FROM public.products 
+    WHERE public.products.id = product_id 
+    AND public.products.producer_id = auth.uid()
+  )
 );
 
 CREATE TABLE IF NOT EXISTS public.orders (
