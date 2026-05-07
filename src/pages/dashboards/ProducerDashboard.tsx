@@ -13,7 +13,10 @@ import {
   Settings,
   ChevronRight,
   Handshake,
-  Wallet
+  Wallet,
+  MoreVertical,
+  Menu,
+  X
 } from 'lucide-react'; 
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -27,6 +30,7 @@ type Tab = 'overview' | 'products' | 'orders' | 'affiliates' | 'add-product';
 
 export default function ProducerDashboard({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, earnings: 0 });
@@ -63,23 +67,81 @@ export default function ProducerDashboard({ user }: { user: User }) {
   }, [user.id]);
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutIcon },
+    { id: 'overview', label: 'Estatísticas', icon: LayoutIcon },
     { id: 'products', label: 'Meus Produtos', icon: PackageIcon },
-    { id: 'orders', label: 'Pedidos', icon: OrdersIcon },
-    { id: 'affiliates', label: 'Afiliados', icon: AffiliatesIcon },
-    { id: 'add-product', label: 'Cadastrar Produto', icon: PlusIcon },
+    { id: 'orders', label: 'Pedidos de Venda', icon: OrdersIcon },
+    { id: 'affiliates', label: 'Gerir Afiliados', icon: AffiliatesIcon },
+    { id: 'add-product', label: 'Cadastrar Novo', icon: PlusIcon },
   ];
 
   if (loading) return <div className="p-8 text-center text-zinc-500">A carregar painel do produtor...</div>;
 
+  const currentTab = tabs.find(t => t.id === activeTab);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-      {/* Navigation Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-900">
-        <div>
-          <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Produtor</h1>
-          <p className="text-zinc-500 font-medium italic">Gerencie o seu negócio com precisão e escala.</p>
+      {/* Header com Menu de Opções */}
+      <div className="flex flex-col gap-6 pb-6 border-b border-zinc-900">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Produtor</h1>
+            <p className="text-zinc-500 font-medium italic flex items-center gap-2">
+              {currentTab?.label}
+              <span className="w-1 h-1 bg-zinc-700 rounded-full"></span>
+              Gestão de Negócio
+            </p>
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 transition-all text-white shadow-xl"
+            >
+              <MoreVertical className="w-6 h-6" />
+            </button>
+            <AnimatePresence>
+              {isMenuOpen && (
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl z-50 overflow-hidden"
+                  >
+                    <div className="p-2">
+                      <p className="px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800/50 mb-2">Menu do Produtor</p>
+                      {tabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            setActiveTab(tab.id as Tab);
+                            setIsMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
+                            activeTab === tab.id 
+                              ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                              : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          <tab.icon className="w-4 h-4" />
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
+
         <div className="flex bg-zinc-900 border border-zinc-800 p-6 rounded-3xl items-center gap-6 shadow-xl shadow-red-600/5">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-600">
@@ -91,24 +153,6 @@ export default function ProducerDashboard({ user }: { user: User }) {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as Tab)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${
-              activeTab === tab.id 
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-zinc-800'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       <AnimatePresence mode="wait">

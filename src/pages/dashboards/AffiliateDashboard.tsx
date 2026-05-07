@@ -14,7 +14,10 @@ import {
   Calendar,
   Handshake,
   Link as LinkIcon,
-  ChevronRight
+  MoreVertical,
+  ChevronRight,
+  Menu,
+  X
 } from 'lucide-react';
 import { formatCurrency, formatDate } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -25,6 +28,7 @@ type Tab = 'overview' | 'orders' | 'browse' | 'links' | 'wallet';
 
 export default function AffiliateDashboard({ user }: { user: User }) {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [links, setLinks] = useState<any[]>([]);
   const [stats, setStats] = useState({ totalSales: 0, commission: 0 });
   const [wallet, setWallet] = useState<{ balance: number } | null>(null);
@@ -86,59 +90,98 @@ export default function AffiliateDashboard({ user }: { user: User }) {
   }, [user.id]);
 
   const tabs = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-    { id: 'orders', label: 'Pedidos', icon: ShoppingCart },
-    { id: 'browse', label: 'Afiliar-se', icon: Handshake },
-    { id: 'links', label: 'Minhas Afiliações', icon: LinkIcon },
-    { id: 'wallet', label: 'Carteira', icon: Wallet }
+    { id: 'overview', label: 'Estatísticas', icon: LayoutDashboard },
+    { id: 'orders', label: 'Meus Pedidos', icon: ShoppingCart },
+    { id: 'browse', label: 'Mercado de Afiliados', icon: Handshake },
+    { id: 'links', label: 'Links de Venda', icon: LinkIcon },
+    { id: 'wallet', label: 'Minha Carteira', icon: Wallet }
   ];
 
   if (loading) return <div className="p-8 text-center text-zinc-500">A carregar painel do afiliado...</div>;
 
+  const currentTab = tabs.find(t => t.id === activeTab);
+
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-6 border-b border-zinc-900">
-        <div>
-          <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Afiliado</h1>
-          <p className="text-zinc-500 font-medium">Bem-vindo, <span className="text-white font-bold">{user.full_name}</span>. Pronto para vender hoje?</p>
+      {/* Header com Menu de Opções */}
+      <div className="flex flex-col gap-6 pb-6 border-b border-zinc-900">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Central do Afiliado</h1>
+            <p className="text-zinc-500 font-medium flex items-center gap-2">
+              <span className="text-white font-bold">{user.full_name}</span> 
+              <span className="w-1 h-1 bg-zinc-700 rounded-full"></span>
+              {currentTab?.label}
+            </p>
+          </div>
+          <div className="relative">
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 transition-all text-white shadow-xl"
+            >
+              <MoreVertical className="w-6 h-6" />
+            </button>
+            <AnimatePresence>
+              {isMenuOpen && (
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl z-50 overflow-hidden"
+                  >
+                    <div className="p-2">
+                      <p className="px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800/50 mb-2">Navegação do Painel</p>
+                      {tabs.map((tab) => (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            setActiveTab(tab.id as Tab);
+                            setIsMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
+                            activeTab === tab.id 
+                              ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                              : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          <tab.icon className="w-4 h-4" />
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
-        <div className="flex bg-zinc-900 border border-zinc-800 p-6 rounded-3xl items-center gap-6 shadow-xl shadow-red-600/5">
-          <div className="flex items-center gap-4 border-r border-zinc-800 pr-6">
+
+        <div className="flex flex-col sm:flex-row bg-zinc-900 border border-zinc-800 p-6 rounded-3xl items-center gap-6 shadow-xl shadow-red-600/5">
+          <div className="flex items-center gap-4 sm:border-r sm:border-zinc-800 sm:pr-6 w-full sm:w-auto">
             <div className="w-12 h-12 bg-red-600/10 rounded-2xl flex items-center justify-center text-red-600">
               <Wallet className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest leading-none mb-1">Saldo Total</p>
+              <p className="text-[10px] text-zinc-500 font-black uppercase tracking-widest leading-none mb-1">Saldo de Comissões</p>
               <p className="text-xl font-black text-white tracking-tighter">{formatCurrency(wallet?.balance || 0)}</p>
             </div>
           </div>
           <motion.button 
              whileHover={{ scale: 1.02 }}
              whileTap={{ scale: 0.98 }}
-             className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl uppercase tracking-widest transition-all shadow-lg shadow-red-600/20"
+             className="w-full sm:w-auto px-6 py-3 bg-red-600 hover:bg-red-700 text-white font-black text-xs rounded-xl uppercase tracking-widest transition-all shadow-lg shadow-red-600/20"
           >
-            Sacar Agora
+            Solicitar Levantamento
           </motion.button>
         </div>
-      </div>
-
-      {/* Navigation Tabs */}
-      <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as Tab)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold whitespace-nowrap transition-all ${
-              activeTab === tab.id 
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                : 'bg-zinc-900 text-zinc-500 hover:bg-zinc-800 hover:text-white border border-zinc-800'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
       </div>
 
       {/* Main Content Area */}
