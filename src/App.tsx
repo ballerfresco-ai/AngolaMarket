@@ -16,25 +16,27 @@ import Orders from './pages/Orders';
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [authChecked, setAuthChecked] = useState(false);
 
   useEffect(() => {
+    // Safety fallback: ensure loading ends eventually
     const timeout = setTimeout(() => {
-      setLoading(loadingState => {
-        if (loadingState) return false;
-        return false;
-      });
-    }, 8000);
+      setLoading(false);
+      setAuthChecked(true);
+    }, 10000);
 
     const checkUser = async () => {
       try {
         if (!(supabase as any)._isConfigured) {
           setLoading(false);
+          setAuthChecked(true);
           return;
         }
 
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const { data: profile } = await supabase
+          // If profile fetch fails, we still have the auth user info
+          const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('*')
             .eq('id', session.user.id)
@@ -43,6 +45,7 @@ export default function App() {
           if (profile) {
             setUser(profile);
           } else {
+            console.warn('Profile not found, using session metadata:', profileError);
             setUser({
               id: session.user.id,
               email: session.user.email || '',
@@ -53,15 +56,17 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.error(err);
+        console.error('Auth check error:', err);
       } finally {
         setLoading(false);
+        setAuthChecked(true);
       }
     };
 
     checkUser();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change:', event);
       if (session?.user) {
         const { data: profile } = await supabase.from('users').select('*').eq('id', session.user.id).single();
         setUser(profile || {
@@ -74,6 +79,7 @@ export default function App() {
       } else {
         setUser(null);
       }
+      setAuthChecked(true);
     });
 
     return () => {
@@ -97,7 +103,7 @@ export default function App() {
     </a>
   );
 
-  if (loading) {
+  if (loading && !authChecked) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-950">
         <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
@@ -106,6 +112,12 @@ export default function App() {
   }
 
   const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+    if (loading && !authChecked) return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+    
     if (user) return <>{children}</>;
     return <Navigate to="/login" replace />;
   };
