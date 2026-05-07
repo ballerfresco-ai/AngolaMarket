@@ -41,47 +41,12 @@ export default function Dashboard({ user }: { user: User }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-zinc-950">
-      <Sidebar user={user} />
-      
-      <main className="flex-1 p-8 overflow-y-auto">
-        <div className="container mx-auto max-w-6xl">
+    <div className="min-h-screen bg-zinc-950">
+      <main className="p-4 md:p-8">
+        <div className="container mx-auto max-w-7xl">
           <Routes>
             <Route index element={getInitialDashboard()} />
-            
-            {/* ADM Routes */}
-            {user.role === 'ADM' && (
-              <>
-                <Route path="approve-products" element={<AdminProducts />} />
-                <Route path="manage-users" element={<AdminUsers />} />
-                <Route path="manage-orders" element={<AdminOrders />} />
-                <Route path="delivery-fees" element={<AdminDeliveryFees />} />
-                <Route path="withdrawals" element={<AdminWithdrawals />} />
-              </>
-            )}
-
-            {/* Producer Routes */}
-            {user.role === 'PRODUTOR' && (
-              <>
-                <Route path="add-product" element={<ProducerAddProduct user={user} />} />
-                <Route path="my-products" element={<ProducerProducts user={user} />} />
-                <Route path="producer-orders" element={<ProducerOrders user={user} />} />
-                <Route path="wallet" element={<ProducerWallet user={user} />} />
-              </>
-            )}
-
-            {/* Affiliate Routes */}
-            {user.role === 'AFILIADO' && (
-              <>
-                <Route path="marketplace" element={<Placeholder title="Mercado de Produtos" />} />
-                <Route path="affiliate-links" element={<Placeholder title="Meus Links" />} />
-                <Route path="wallet" element={<Placeholder title="Minha Carteira" />} />
-              </>
-            )}
-
-            {/* Client/General Routes */}
-            <Route path="profile" element={<Placeholder title="Meu Perfil" />} />
-            <Route path="notifications" element={<Notifications user={user} />} />
+            {/* Outras rotas podem ser acessadas via abas nos componentes de dashboard */}
           </Routes>
         </div>
       </main>

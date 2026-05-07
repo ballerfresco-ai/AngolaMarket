@@ -9,7 +9,10 @@ import {
   Truck,
   ArrowUpRight,
   ArrowDownRight,
-  LogOut
+  LogOut,
+  MoreVertical,
+  Menu as MenuIcon,
+  X
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatCurrency, formatDate } from '../../lib/utils';
@@ -26,6 +29,7 @@ type Tab = 'overview' | 'products' | 'users' | 'orders' | 'fees' | 'withdrawals'
 
 export default function AdmDashboard() {
   const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [stats, setStats] = useState({
     users: 0,
     products: 0,
@@ -73,40 +77,86 @@ export default function AdmDashboard() {
   }, []);
 
   const menuItems = [
-    { id: 'overview', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard },
     { id: 'products', label: 'Produtos Pendentes', icon: Package },
-    { id: 'users', label: 'Utilizadores', icon: UsersIcon },
-    { id: 'orders', label: 'Todos os Pedidos', icon: TrendingUp },
+    { id: 'users', label: 'Gestão de Usuários', icon: UsersIcon },
+    { id: 'orders', label: 'Relatório de Pedidos', icon: TrendingUp },
     { id: 'fees', label: 'Taxas de Entrega', icon: Truck },
-    { id: 'withdrawals', label: 'Saques Pendentes', icon: CreditCard },
+    { id: 'withdrawals', label: 'Solicitações de Saque', icon: CreditCard },
   ];
 
   if (loading) return <div className="p-8 text-center text-zinc-500">A processar dados do sistema...</div>;
 
-  console.log('AdmDashboard renderizado. ActiveTab:', activeTab);
+  const currentTab = menuItems.find(item => item.id === activeTab);
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8">
-      {/* Sidebar Navigation */}
-      <aside className="w-full lg:w-64 space-y-2">
-        {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setActiveTab(item.id as Tab)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all font-bold text-sm ${
-              activeTab === item.id 
-                ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
-                : 'bg-zinc-900 text-zinc-400 hover:bg-zinc-800 hover:text-white'
-            }`}
-          >
-            <item.icon className="w-5 h-5 truncate" />
-            <span>{item.label}</span>
-          </button>
-        ))}
-      </aside>
+    <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
+      {/* Header com Navegação em Menu */}
+      <div className="flex flex-col gap-6 pb-6 border-b border-zinc-900">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-black mb-2 tracking-tight uppercase">Painel de Controlo</h1>
+            <p className="text-zinc-500 font-medium flex items-center gap-2">
+              {currentTab?.label}
+              <span className="w-1 h-1 bg-zinc-700 rounded-full"></span>
+              Admin Central
+            </p>
+          </div>
+          
+          <div className="relative">
+            <button 
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="p-3 bg-zinc-900 border border-zinc-800 rounded-2xl hover:bg-zinc-800 transition-all text-white shadow-xl flex items-center gap-2 group"
+            >
+              <MoreVertical className="w-6 h-6 group-hover:text-red-500 transition-colors" />
+              <span className="hidden sm:inline text-xs font-black uppercase tracking-widest px-2">Menu</span>
+            </button>
+            <AnimatePresence>
+              {isMenuOpen && (
+                <>
+                  <motion.div 
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    onClick={() => setIsMenuOpen(false)}
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+                  />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                    className="absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-800 rounded-3xl shadow-2xl z-50 overflow-hidden"
+                  >
+                    <div className="p-2">
+                      <p className="px-4 py-3 text-[10px] font-black text-zinc-500 uppercase tracking-widest border-b border-zinc-800/50 mb-2">Administração do Sistema</p>
+                      {menuItems.map((item) => (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveTab(item.id as Tab);
+                            setIsMenuOpen(false);
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-bold transition-all ${
+                            activeTab === item.id 
+                              ? 'bg-red-600 text-white shadow-lg shadow-red-600/20' 
+                              : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          <item.icon className="w-4 h-4" />
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </div>
 
       {/* Main Content Area */}
-      <main className="flex-1 min-w-0">
+      <main className="min-w-0">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
